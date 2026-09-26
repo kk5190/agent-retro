@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude Code Habits</title>
+<style>
+  :root {
+    --bg: #08080a;
+    --panel: #101014;
+    --panel-2: #17171d;
+    --line: #232329;
+    --text: #ecedf1;
+    --muted: #8b8b96;
+    --faint: #5a5a64;
+    --accent: #ffc266;
+    --accent-2: #8ab4f8;
+    --accent-3: #7ee0c0;
+    --radius: 14px;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    padding: 32px clamp(16px, 4vw, 56px) 80px; min-height: 100vh;
+  }
+
+  header { max-width: 1460px; margin: 0 auto 22px; }
+  .eyebrow { color: var(--faint); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; margin-bottom: 10px; }
+  h1 { font-size: clamp(28px, 4vw, 46px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 8px; font-weight: 640; }
+  h1 .thin { color: var(--faint); font-weight: 300; }
+  .scope { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .scope b { color: var(--text); font-weight: 500; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .controls label { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  select, button { font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; outline: none; }
+  select:hover, button:hover { border-color: #34343d; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #17130a; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  .chk { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; cursor: pointer; }
+  .chk input { accent-color: var(--accent); }
+  .status { color: var(--faint); font-family: var(--mono); font-size: 11px; margin-left: auto; }
+  .status.busy { color: var(--accent); }
+
+  main { max-width: 1460px; margin: 0 auto; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; opacity: 0; transform: translateY(6px); animation: rise .45s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .card, .kpi { animation: none !important; opacity: 1 !important; transform: none !important; } .fill, .vbar i, .dow i, .hbar i { transition: none !important; } }
+  .card h2 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 16px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+  .card .sub { color: var(--faint); font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .span3 { grid-column: span 3; } .span4 { grid-column: span 4; } .span5 { grid-column: span 5; }
+  .span6 { grid-column: span 6; } .span7 { grid-column: span 7; } .span8 { grid-column: span 8; } .span12 { grid-column: span 12; }
+  @media (max-width: 1080px) { .span3,.span4,.span5,.span6,.span7,.span8 { grid-column: span 12; } }
+
+  /* insight strip */
+  .insights { grid-column: span 12; display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; }
+  .ins { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; position: relative; overflow: hidden; opacity: 0; transform: translateY(6px); animation: rise .45s cubic-bezier(.2,.7,.2,1) forwards; }
+  .ins::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: .55; }
+  .ins .k { color: var(--faint); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  .ins .v { font-size: 19px; font-weight: 640; letter-spacing: -0.02em; margin: 3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ins .d { color: var(--muted); font-size: 11px; }
+
+  /* heatmap */
+  .hm { display: grid; grid-template-columns: 40px repeat(24, 1fr); gap: 3px; align-items: center; }
+  .hm .hl { color: var(--faint); font-family: var(--mono); font-size: 9px; text-align: right; padding-right: 4px; }
+  .hm .hc { color: var(--faint); font-family: var(--mono); font-size: 9px; text-align: center; }
+  .hm .cell { aspect-ratio: 1 / 1; border-radius: 3px; background: var(--panel-2); transition: transform .12s; }
+  .hm .cell:hover { transform: scale(1.35); outline: 1px solid var(--accent); z-index: 2; }
+  .hm .l1 { background: rgba(255,194,102,.22); } .hm .l2 { background: rgba(255,194,102,.45); }
+  .hm .l3 { background: rgba(255,194,102,.72); } .hm .l4 { background: var(--accent); }
+  .legend { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 10px; margin-top: 12px; justify-content: flex-end; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  /* charts */
+  .chart { width: 100%; height: 190px; display: block; }
+  .chart text { fill: var(--faint); font-size: 10px; font-family: var(--mono); }
+  .chart .ma { fill: none; stroke: var(--accent-2); stroke-width: 2; stroke-linejoin: round; opacity: .9; }
+  .chart .raw { fill: none; stroke: rgba(255,194,102,.5); stroke-width: 1.4; }
+  .chart .area { fill: url(#g); }
+  .chart .base { stroke: var(--line); }
+
+  /* histograms */
+  .hist { display: flex; align-items: flex-end; gap: 5px; height: 118px; }
+  .hbar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
+  .hbar .n { font-family: var(--mono); font-size: 9px; color: var(--faint); }
+  .hbar i { width: 100%; height: 0; border-radius: 4px 4px 2px 2px; background: linear-gradient(180deg, var(--accent-3), #2c5f52); transition: height .7s cubic-bezier(.2,.7,.2,1); }
+  .hbar .t { font-family: var(--mono); font-size: 8.5px; color: var(--faint); white-space: nowrap; }
+
+  /* rows */
+  .rows { display: flex; flex-direction: column; gap: 9px; }
+  .row { display: grid; grid-template-columns: minmax(90px, 42%) 1fr auto; gap: 10px; align-items: center; }
+  .row .lab { color: var(--text); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .track { background: var(--panel-2); border-radius: 6px; height: 9px; overflow: hidden; }
+  .row .fill { height: 100%; width: 0; border-radius: 6px; background: linear-gradient(90deg, var(--accent), #ffdba1); transition: width .7s cubic-bezier(.2,.7,.2,1); }
+  .row .num { color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; }
+  .row .num b { color: var(--text); font-weight: 500; }
+
+  /* agent table */
+  table.agents { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.agents th { text-align: right; color: var(--faint); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; padding: 0 0 8px; }
+  table.agents th:first-child { text-align: left; }
+  table.agents td { padding: 7px 0; border-top: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  table.agents td:first-child { text-align: left; color: var(--text); }
+  table.agents .mini { height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; min-width: 60px; }
+  table.agents .mini i { display: block; height: 100%; background: var(--accent-3); }
+
+  /* donut + stats */
+  .donutwrap { display: flex; gap: 20px; align-items: center; }
+  .donut { width: 128px; height: 128px; flex: none; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 14; }
+  .legend2 { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+  .legend2 .li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend2 .sw { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+  .legend2 .val { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+  .stat .k { color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .stat .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 12px; color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 500; }
+  .chip .x { color: var(--accent); font-family: var(--mono); }
+  table.mini { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.mini td { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+  table.mini td:first-child { color: var(--text); }
+  table.mini td:last-child { text-align: right; font-family: var(--mono); font-size: 11.5px; }
+  table.mini tr:last-child td { border-bottom: none; }
+  .empty { color: var(--faint); font-size: 12px; font-style: italic; }
+  footer { max-width: 1460px; margin: 26px auto 0; color: var(--faint); font-family: var(--mono); font-size: 11px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Local analysis · nothing leaves this machine</div>
+  <h1>Claude Code <span class="thin">habits</span></h1>
+  <div class="scope" id="scope">loading…</div>
+  <div class="controls">
+    <label for="project">project</label>
+    <select id="project"><option value="">all</option></select>
+    <label for="days">window</label>
+    <select id="days"><option value="">all time</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
+    <label class="chk"><input type="checkbox" id="transcripts" /> transcripts/</label>
+    <label class="chk"><input type="checkbox" id="all" /> all sources</label>
+    <label class="chk"><input type="checkbox" id="agents" /> all agents</label>
+    <select id="agent" title="restrict to one agent"><option value="">every agent</option></select>
+    <button id="refresh" class="primary">refresh</button>
+    <span class="status" id="status"></span>
+  </div>
+</header>
+
+<main>
+  <section class="insights" id="insights"></section>
+
+  <section class="card span12">
+    <h2>Activity heatmap <span class="sub">prompts by weekday × hour — dark = idle, bright = deep work</span></h2>
+    <div class="hm" id="heatmap"></div>
+    <div class="legend"><span>less</span><i style="background:var(--panel-2)"></i><i style="background:rgba(255,194,102,.22)"></i><i style="background:rgba(255,194,102,.45)"></i><i style="background:rgba(255,194,102,.72)"></i><i style="background:var(--accent)"></i><span>more</span></div>
+  </section>
+
+  <section class="card span8">
+    <h2>Activity over time <span class="sub">daily prompts · blue = 7-day moving average</span></h2>
+    <svg class="chart" id="trend" viewBox="0 0 1000 190" preserveAspectRatio="none"></svg>
+  </section>
+
+  <section class="card span4">
+    <h2>Rhythm <span class="sub">by day of week</span></h2>
+    <div class="dow" id="dow"></div>
+    <div class="rows" id="hours" style="margin-top:16px"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Prompt length <span class="sub">characters</span></h2>
+    <div class="hist" id="promptHist"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Session length <span class="sub">agent turns</span></h2>
+    <div class="hist" id="sessionHist"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Agents <span class="sub">who does the work</span></h2>
+    <table class="agents" id="agentTable"></table>
+  </section>
+
+  <section class="card span4">
+    <h2>Tokens &amp; cost</h2>
+    <div class="stats" id="costStats"></div>
+    <div class="rows" id="costByAgent" style="margin-top:14px"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Context window <span class="sub">input tokens seen per turn</span></h2>
+    <div class="stats" id="ctxStats"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Prompt phases</h2>
+    <div class="rows" id="phases"></div>
+  </section>
+
+  <section class="card span12">
+    <h2>Tokens over time <span class="sub">daily total tokens · blue = 7-day moving average</span></h2>
+    <svg class="chart" id="tokTrend" viewBox="0 0 1000 190" preserveAspectRatio="none"></svg>
+  </section>
+
+  <section class="card span6">
+    <h2>Skills used</h2>
+    <div class="rows" id="skills"></div>
+  </section>
+
+  <section class="card span6">
+    <h2>Plugins &amp; MCP</h2>
+    <div class="rows" id="mcp"></div>
+  </section>
+
+  <section class="card span6">
+    <h2>Themes <span class="sub">share of prompts mentioning each</span></h2>
+    <div class="rows" id="themes"></div>
+  </section>
+
+  <section class="card span6">
+    <h2>Tone markers</h2>
+    <div class="rows" id="tone"></div>
+  </section>
+
+  <section class="card span5">
+    <h2>Tool usage <span class="sub">within your turns</span></h2>
+    <div class="donutwrap">
+      <svg class="donut" id="donut" viewBox="0 0 120 120"></svg>
+      <div class="legend2" id="toollegend"></div>
+    </div>
+  </section>
+
+  <section class="card span4">
+    <h2>Projects</h2>
+    <div class="rows" id="projects"></div>
+  </section>
+
+  <section class="card span3">
+    <h2>Models</h2>
+    <div class="rows" id="models"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Sessions</h2>
+    <div class="stats" id="sessions"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>Top tools</h2>
+    <div class="rows" id="tools"></div>
+  </section>
+
+  <section class="card span4">
+    <h2>CLI commands</h2>
+    <div class="rows" id="cmds"></div>
+  </section>
+
+  <section class="card span6">
+    <h2>Most-repeated prompts</h2>
+    <div class="chips" id="repeated"></div>
+  </section>
+
+  <section class="card span6">
+    <h2>Longest sessions</h2>
+    <table class="mini" id="longest"></table>
+  </section>
+
+  <section class="card span12">
+    <h2>Session titles <span class="sub">task labels you gave</span></h2>
+    <div class="chips" id="titles"></div>
+  </section>
+</main>
+
+<footer>
+  <span id="foot-left">cc-habits</span>
+  <span id="foot-right"></span>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString());
+const pct = (v, t) => (t ? Math.round((100 * v) / t) + '%' : '0%');
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function rows(list, total, color) {
+  if (!list.length) return '<div class="empty">no data</div>';
+  const max = Math.max(...list.map(([, v]) => v));
+  return list.map(([k, v]) => `
+    <div class="row">
+      <div class="lab" title="${esc(k)}">${esc(k)}</div>
+      <div class="track"><div class="fill" style="${color ? `background:${color};` : ''}" data-w="${Math.round((v / max) * 100)}"></div></div>
+      <div class="num"><b>${fmt(v)}</b> ${total ? pct(v, total) : ''}</div>
+    </div>`).join('');
+}
+function animateBars(root) {
+  requestAnimationFrame(() => document.querySelectorAll(`${root} [data-w]`).forEach((el) => { el.style.width = el.dataset.w + '%'; }));
+}
+
+/* ---- insight strip ---- */
+function renderInsights(a) {
+  $('insights').innerHTML = (a.insights || []).map((i, n) => `
+    <div class="ins" style="animation-delay:${n * 35}ms"><div class="k">${esc(i.k)}</div><div class="v" title="${esc(i.v)}">${esc(i.v)}</div><div class="d">${esc(i.d)}</div></div>`).join('');
+}
+
+/* ---- heatmap ---- */
+function renderHeatmap(a) {
+  const hm = a.cadence.heatmap || Array.from({ length: 7 }, () => Array(24).fill(0));
+  const max = Math.max(1, ...hm.flat());
+  const level = (v) => (v === 0 ? 0 : Math.max(1, Math.min(4, Math.ceil((v / max) * 4))));
+  let html = '<div></div>';
+  for (let h = 0; h < 24; h++) html += `<div class="hc">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</div>`;
+  for (let d = 0; d < 7; d++) {
+    html += `<div class="hl">${DOW[d]}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const v = hm[d][h];
+      html += `<div class="cell l${level(v)}" title="${DOW[d]} ${String(h).padStart(2, '0')}:00 — ${v} prompts"></div>`;
+    }
+  }
+  $('heatmap').innerHTML = html;
+}
+
+/* ---- trend line with 7-day moving average ---- */
+function fmtN(n) { return n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n || 0); }
+
+function lineChart(svg, series, valueOf, gid, peakLabel) {
+  if (!series || series.length < 2) { svg.innerHTML = '<text x="20" y="95">not enough data in this window</text>'; return; }
+  const W = 1000, H = 190, padB = 22, padT = 12;
+  const max = Math.max(1, ...series.map(valueOf));
+  const x = (i) => (i / (series.length - 1)) * W;
+  const y = (v) => H - padB - (v / max) * (H - padB - padT);
+  const raw = series.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(valueOf(d)).toFixed(1)}`).join(' ');
+  const ma = series.map((d, i) => {
+    const from = Math.max(0, i - 6); const win = series.slice(from, i + 1);
+    return `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(win.reduce((s, w) => s + valueOf(w), 0) / win.length).toFixed(1)}`;
+  }).join(' ');
+  const area = `${raw} L${W},${H - padB} L0,${H - padB} Z`;
+  const label = (i) => esc(series[Math.round(i * (series.length - 1))].date);
+  svg.innerHTML = `
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,194,102,.30)"/><stop offset="100%" stop-color="rgba(255,194,102,0)"/>
+    </linearGradient></defs>
+    <line class="base" x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}"/>
+    <path class="area" d="${area}" fill="url(#${gid})"/>
+    <path class="raw" d="${raw}"/>
+    <path class="ma" d="${ma}"/>
+    <text x="2" y="${H - 6}">${label(0)}</text>
+    <text x="${W / 2}" y="${H - 6}" text-anchor="middle">${label(0.5)}</text>
+    <text x="${W - 2}" y="${H - 6}" text-anchor="end">${label(1)}</text>
+    <text x="${W - 2}" y="14" text-anchor="end">${peakLabel} ${fmtN(max)}</text>`;
+}
+function renderTrend(a) { lineChart($('trend'), a.cadence.daily || [], (d) => d.n, 'g1', 'peak'); }
+function renderTokenTrend(a) { lineChart($('tokTrend'), (a.tokens && a.tokens.daily) || [], (d) => d.n, 'g2', 'peak'); }
+
+function renderCost(a) {
+  const tk = a.tokens || {}, c = a.cost || {}, cx = a.context || {};
+  const stat = ([k, v]) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`;
+  $('costStats').innerHTML = [['Total', fmtN(tk.total)], ['Cost', c.usd ? '$' + c.usd : '—'], ['Cache read', fmtN(tk.cacheRead)], ['Output', fmtN(tk.output)], ['Cache write', fmtN(tk.cacheWrite)], ['Input (new)', fmtN(tk.input)]].map(stat).join('');
+  const by = Object.entries(c.byAgent || {}).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]);
+  const mx = Math.max(0.01, ...by.map(([, v]) => v));
+  $('costByAgent').innerHTML = by.length ? by.map(([k, v]) => `<div class="row"><div class="lab">${esc(k)}</div><div class="track"><div class="fill" data-w="${Math.round((v / mx) * 100)}"></div></div><div class="num"><b>$${v}</b></div></div>`).join('') : '<div class="empty">no cost recorded</div>';
+  $('ctxStats').innerHTML = [['Median', fmtN(cx.median)], ['p90', fmtN(cx.p90)], ['Peak', fmtN(cx.max)], ['Cached', (cx.cacheHitRate || 0) + '%'], ['>150k turns', cx.highTurns || 0], ['Measured', cx.turns || 0]].map(stat).join('');
+  renderTokenTrend(a);
+}
+
+function renderSkills(a) {
+  const sk = Object.entries(a.skills || {}).sort((x, y) => y[1] - x[1]).slice(0, 14);
+  $('skills').innerHTML = rows(sk, Object.values(a.skills || {}).reduce((s, v) => s + v, 0)) || '<div class="empty">none detected</div>';
+  const P = a.plugins || {};
+  const mcp = Object.entries(P.mcpServers || {}).sort((x, y) => y[1] - x[1]).slice(0, 10);
+  let html = rows(mcp, a.tools.total);
+  const pc = Object.entries(P.pluginCommands || {}).sort((x, y) => y[1] - x[1]).slice(0, 5);
+  if (pc.length) html += `<div class="sub" style="display:block;margin:14px 0 8px;color:var(--faint);font-size:11px;letter-spacing:.1em">PLUGIN COMMANDS</div>` + rows(pc, Object.values(P.pluginCommands).reduce((s, v) => s + v, 0), 'linear-gradient(90deg,#c4a6ff,#e3d3ff)');
+  $('mcp').innerHTML = html || '<div class="empty">none</div>';
+}
+
+/* ---- histograms ---- */
+function histLabels(edges) {
+  return edges.map((e, i) => (i < edges.length - 1 ? `${e}–${edges[i + 1]}` : `${e}+`));
+}
+function renderHist(el, series) {
+  if (!series) { $(el).innerHTML = '<div class="empty">no data</div>'; return; }
+  const { edges, bins } = series;
+  const max = Math.max(1, ...bins);
+  const labels = histLabels(edges);
+  $(el).innerHTML = bins.map((v, i) => `
+    <div class="hbar"><span class="n">${v}</span><i data-h="${Math.round((v / max) * 100)}"></i><span class="t">${esc(labels[i])}</span></div>`).join('');
+  requestAnimationFrame(() => document.querySelectorAll(`${el} [data-h]`).forEach((e) => { e.style.height = e.dataset.h + '%'; }));
+}
+
+/* ---- agent comparison ---- */
+function renderAgents(a) {
+  const m = a.agentMatrix || [];
+  if (!m.length) { $('agentTable').innerHTML = '<tr><td class="empty">no data</td></tr>'; return; }
+  const top = Math.max(...m.map((x) => x.prompts));
+  $('agentTable').innerHTML = `
+    <tr><th>agent</th><th>prompts</th><th>tools</th><th>sess</th><th>days</th><th>med len</th></tr>` +
+    m.map((x) => `<tr>
+      <td>${esc(x.agent)}<div class="mini" style="margin-top:4px"><i style="width:${Math.round((x.prompts / top) * 100)}%"></i></div></td>
+      <td>${fmt(x.prompts)}</td><td>${fmt(x.tools)}</td><td>${fmt(x.sessions)}</td><td>${fmt(x.activeDays)}</td><td>${fmt(x.medianLen)}</td>
+    </tr>`).join('');
+}
+
+/* ---- other panels ---- */
+function renderDonut(a) {
+  const b = a.tools.buckets, total = a.tools.total || 1;
+  const palette = { shell: 'var(--accent)', browser: 'var(--accent-2)', edit: 'var(--accent-3)', read: '#c4a6ff', agent: '#ff9db1', web: '#9be3ff', other: '#4a4a54' };
+  const segs = Object.entries(b).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]);
+  const C = 2 * Math.PI * 50; let off = 0;
+  $('donut').innerHTML = `<circle r="50" cx="60" cy="60" stroke="var(--panel-2)"></circle>` + segs.map(([k, v]) => {
+    const len = (v / total) * C;
+    const el = `<circle r="50" cx="60" cy="60" stroke="${palette[k] || '#555'}" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}"></circle>`;
+    off += len; return el;
+  }).join('');
+  $('toollegend').innerHTML = segs.map(([k, v]) => `<div class="li"><span class="sw" style="background:${palette[k] || '#555'}"></span>${esc(k)}<span class="val">${fmt(v)} · ${pct(v, total)}</span></div>`).join('');
+}
+
+function renderAll(a) {
+  document.title = `Habits · ${a.scope.first} → ${a.scope.last}`;
+  const v = a.volume;
+  $('scope').innerHTML = `<b>${fmt(a.scope.files)}</b> transcripts · <b>${v.totalAssistant}</b> agent turns · <b>${fmt(v.prompts)}</b> human turns · ${esc(a.scope.first)} → ${esc(a.scope.last)}`;
+  renderInsights(a); renderHeatmap(a); renderTrend(a); renderHist('promptHist', a.histograms && a.histograms.prompt); renderHist('sessionHist', a.histograms && a.histograms.sessions); renderAgents(a); renderCost(a); renderSkills(a);
+  $('phases').innerHTML = rows(Object.entries(a.phases || {}).sort((x, y) => y[1] - x[1]), v.humanPrompts || v.prompts);
+
+  const d = a.cadence.dow, dmax = Math.max(...Object.values(d), 1);
+  $('dow').innerHTML = Object.entries(d).map(([k, val]) => `<div class="d" style="flex:1;text-align:center"><div style="background:var(--panel-2);border-radius:6px;height:40px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden"><i data-h="${Math.round((val / dmax) * 100)}" style="display:block;height:0;background:var(--accent-2);opacity:.75;transition:height .7s"></i></div><div style="font-size:10px;color:var(--muted);margin-top:6px">${esc(k)}</div><div style="font-family:var(--mono);font-size:10px;color:var(--faint)">${val}</div></div>`).join('');
+  requestAnimationFrame(() => document.querySelectorAll('#dow [data-h]').forEach((e) => { e.style.height = e.dataset.h + '%'; }));
+
+  const hmax = Math.max(...a.cadence.hour, 1);
+  $('hours').innerHTML = a.cadence.hour.map((val, h) => val ? `<div class="row"><div class="lab" style="font-family:var(--mono);color:var(--muted)">${String(h).padStart(2, '0')}:00</div><div class="track"><div class="fill" data-w="${Math.round((val / hmax) * 100)}"></div></div><div class="num"><b>${val}</b></div></div>` : '').join('');
+  animateBars('#hours');
+
+  $('themes').innerHTML = rows(Object.entries(a.themes).sort((x, y) => y[1] - x[1]), v.prompts);
+  $('tone').innerHTML = rows(Object.entries(a.tone).sort((x, y) => y[1] - x[1]), v.prompts, 'linear-gradient(90deg, var(--accent-2), #b9d3ff)');
+  $('projects').innerHTML = rows(Object.entries(a.projects).sort((x, y) => y[1] - x[1]), v.prompts);
+  $('models').innerHTML = rows(Object.entries(a.models).sort((x, y) => y[1] - x[1]).slice(0, 6), v.totalAssistant, 'linear-gradient(90deg, var(--accent-3), #b6f0dd)');
+  renderDonut(a);
+  $('tools').innerHTML = rows(Object.entries(a.tools.byName).sort((x, y) => y[1] - x[1]).slice(0, 8), a.tools.total);
+
+  const s = a.sessions;
+  $('sessions').innerHTML = [['Sessions', s.count], ['Median turns', s.medianTurns], ['Longest', s.maxTurns], ['Median time', s.medianMinutes + 'm'], ['Longest time', Math.round(s.maxMinutes / 60) + 'h']]
+    .map(([k, val]) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(val)}</div></div>`).join('');
+  $('longest').innerHTML = s.longest.slice(0, 6).map((x) => `<tr><td>${esc(x.proj)}</td><td>${x.turns} turns · ${x.minutes}m</td></tr>`).join('');
+  $('repeated').innerHTML = a.repeated.slice(0, 18).map(([k, val]) => `<span class="chip"><span class="x">${val}×</span> ${esc(k)}</span>`).join('') || '<span class="empty">none</span>';
+  const cmds = a.cliHistory && a.cliHistory.commands ? Object.entries(a.cliHistory.commands).sort((x, y) => y[1] - x[1]).slice(0, 10) : [];
+  $('cmds').innerHTML = cmds.length ? rows(cmds, a.cliHistory.entries.length, 'linear-gradient(90deg,#c4a6ff,#e3d3ff)') : '<div class="empty">history disabled or empty</div>';
+  $('titles').innerHTML = a.sampleTitles.slice(0, 24).map((t) => `<span class="chip">${esc(t)}</span>`).join('') || '<span class="empty">none</span>';
+  animateBars('main');
+  syncProjects(a.projects);
+
+  $('foot-left').textContent = `generated ${a.generatedAt.slice(0, 19).replace('T', ' ')}`;
+  $('foot-right').textContent = 'source: ~/.claude + other agent stores';
+}
+
+function syncProjects(projects) {
+  const sel = $('project'); const cur = sel.value;
+  const names = Object.keys(projects || {}).sort();
+  const existing = [...sel.options].map((o) => o.value).filter(Boolean);
+  if (names.length && (names.length !== existing.length || names.some((n) => !existing.includes(n)))) {
+    sel.innerHTML = '<option value="">all</option>' + names.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    sel.value = cur;
+  }
+}
+
+async function load() {
+  $('status').classList.add('busy'); $('status').textContent = 'analyzing…';
+  const q = new URLSearchParams();
+  if ($('project').value) q.set('project', $('project').value);
+  if ($('days').value) q.set('days', $('days').value);
+  if ($('transcripts').checked) q.set('transcripts', '1');
+  if ($('all').checked) q.set('all', '1');
+  if ($('agents').checked) q.set('agents', '1');
+  if ($('agent').value) q.set('agent', $('agent').value);
+  try {
+    const t0 = performance.now();
+    const a = await fetch('/api/data?' + q.toString()).then((r) => r.json());
+    if (a.error) throw new Error(a.error);
+    renderAll(a);
+    $('status').textContent = `${Math.round(performance.now() - t0)} ms`;
+  } catch (e) { $('status').textContent = 'error: ' + e.message; }
+  finally { $('status').classList.remove('busy'); }
+}
+
+async function init() {
+  try {
+    const m = await fetch('/api/meta').then((r) => r.json());
+    $('project').innerHTML = '<option value="">all</option>' + (m.projects || []).map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    $('agent').innerHTML = '<option value="">every agent</option>' + (m.agents || []).map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    $('transcripts').parentElement.style.display = m.transcripts ? '' : 'none';
+  } catch {}
+  ['project', 'days', 'transcripts', 'all', 'agents', 'agent'].forEach((id) => $(id).addEventListener('change', load));
+  $('refresh').addEventListener('click', load);
+  load();
+}
+init();
+</script>
+</body>
+</html>
