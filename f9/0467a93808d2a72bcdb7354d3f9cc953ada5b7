@@ -1,0 +1,24 @@
+README.md
+  h_dd2a48332474f2 1-145
+agents.mjs
+  h_dd2a48332474f2 1-533
+habits.mjs
+  h_dd2a48332474f2 1-715
+tests.mjs
+  h_dd2a48332474f2 1-140
+ui.mjs
+  h_dd2a48332474f2 1-114
+ui/index.html
+  h_dd2a48332474f2 1-505
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f90467a93808d2a72bcdb7354d3f9cc953ada5b7",
+  "prompts": {},
+  "humans": {
+    "h_dd2a48332474f2": {
+      "author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
