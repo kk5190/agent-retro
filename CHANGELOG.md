@@ -45,6 +45,9 @@
   - a dashboard with a Home page (verdict, five areas with a status and a peek, what to do next,
     whether last month's changes worked), focused pages for the review, work, cost, setup, habits
     and sessions, one time-period switch (this month, last month, all time), and a summary page
+  - a quiet visual language: warm grey with one blue accent, charts that grey out everything but
+    the value that matters, half-circle gauges per area, a 24-hour clock of when you prompt, and
+    light and dark themes
   - `--scope current|last|all` to limit the whole analysis to one period
   - terminal and markdown reports
   - a redacted, versioned export (`--export`, `--sessions`, `--text none|excerpts|full`)
