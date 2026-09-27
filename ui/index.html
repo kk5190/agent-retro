@@ -354,14 +354,31 @@
   .kz-line { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--rule); font-size: 13.5px; }
   .kz-line:first-child { border-top: 0; }
 
-  /* Digest ------------------------------------------------------------------ */
-  .digest { max-width: 680px; }
-  .digest h2 { font: 400 clamp(30px, 3.8vw, 42px)/1.1 var(--serif); letter-spacing: -0.01em; margin: 8px 0 14px; }
-  .digest h3 { font: 600 10.5px var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); margin: 30px 0 8px; }
-  .digest p, .digest li { color: var(--ink-2); }
-  .digest ul { padding-left: 20px; display: grid; gap: 6px; }
-  .digest li b { color: var(--ink); }
-  .digest .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
+  /* Summary: the review as one sheet to read --------------------------------- */
+  .digest-bar { max-width: 780px; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .digest { max-width: 780px; margin: 0 auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 24px; padding: clamp(24px, 5vw, 52px) clamp(20px, 5vw, 60px); }
+  .digest h2 { font: 400 clamp(30px, 4vw, 44px)/1.1 var(--serif); letter-spacing: -0.01em; margin: 12px 0 14px; }
+  .digest .lede { font: 400 18px/1.5 var(--serif); color: var(--ink-2); margin: 0; }
+  .digest .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 28px 0 8px; padding: 18px 0; border-block: 1px solid var(--rule); }
+  .digest .stats div { padding: 0 16px; border-left: 1px solid var(--rule); min-width: 0; }
+  .digest .stats div:first-child { padding-left: 0; border-left: 0; }
+  .digest .stats b { display: block; font: 400 30px/1.1 var(--display); letter-spacing: -0.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .digest .stats div > span { font-size: 12px; color: var(--ink-3); }
+  .digest .stats b.txt { font-size: 20px; line-height: 1.5; letter-spacing: -0.01em; white-space: normal; }
+  @media (max-width: 640px) { .digest .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; } .digest .stats div:nth-child(3) { padding-left: 0; border-left: 0; } }
+  .digest h3 { display: flex; align-items: center; gap: 8px; font: 600 10.5px var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); margin: 34px 0 6px; }
+  .digest h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--ink-3)); }
+  .digest h3.good { --c: var(--good); } .digest h3.bad { --c: var(--alert); } .digest h3.change { --c: var(--signal); } .digest h3.next { --c: var(--ink); }
+  .drow { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 12px; padding: 12px 0; border-top: 1px solid var(--rule); font-size: 14px; }
+  .drow:first-of-type { border-top: 0; }
+  .drow > :first-child { grid-row: span 2; }
+  .drow b { font-weight: 500; color: var(--ink); line-height: 1.4; }
+  .drow span { color: var(--ink-3); font-size: 13px; }
+  .drow .n { font: 400 19px/1.2 var(--serif); color: var(--ink-3); }
+  .drow:first-of-type .n { color: var(--signal); }
+  .drow .kind { justify-self: start; align-self: start; margin-top: 2px; }
+  .drow.kinded { grid-template-columns: 54px minmax(0, 1fr); }
+  .digest .tools { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--rule); }
 
   /* Review board ----------------------------------------------------------------- */
   .card { margin: 24px 0 14px; padding: 22px 24px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); }
@@ -695,7 +712,7 @@
   </div>
   <div class="page" id="page-digest" hidden>
     <section id="digest-page" class="intro">
-      <p style="margin:0 0 18px"><a href="#home">← Back to Home</a></p>
+      <div class="digest-bar"><a class="panel-link" href="#home">← Back to Home</a><span class="eyebrow">Monthly summary</span></div>
       <article class="digest" id="digest"></article>
     </section>
   </div>
@@ -1528,15 +1545,22 @@ const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); r
 function renderDigest(a) {
   const r = a.retro;
   if (!r) { $('digest').innerHTML = '<p class="empty">Nothing to summarise yet.</p>'; return; }
-  const li = (list) => (list.length ? `<ul>${list.map((it) => `<li><b>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : `<p class="empty">Nothing this ${r.period.unit}.</p>`);
-  const f = r.followUp;
-  $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' (in progress)' : ''} · ${r.card.sessions} sessions${r.card.spend ? ' · $' + Math.round(r.card.spend) : ''} · ${r.card.agentHours} h</p>
-    <h2>${esc(r.verdict)}</h2><p>${esc(r.headline)}</p>
-    <h3>What went well</h3>${li(r.wentWell)}
-    <h3>What didn't</h3>${li(r.didntGoWell)}
-    <h3>What to change</h3>${r.change.length ? `<ul>${r.change.map((it) => `<li><b><span class="kind ${it.kind}">${it.kind}</span>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing to change.</p>'}
-    <h3>Try next ${esc(r.period.unit)}</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">Nothing to do next.</p>'}
-    ${f ? `<h3>Did it work?</h3><ul>${f.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
+  const none = (what) => `<p class="empty">${what}</p>`;
+  const rows = (list, dot) => (list.length ? list.map((it) => `<div class="drow">${vdot(dot)}<b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}</div>`).join('') : none(`Nothing this ${esc(r.period.unit)}.`));
+  const f = r.followUp, c = r.card;
+  $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' · in progress' : ''}</p>
+    <h2>${esc(r.verdict)}</h2><p class="lede">${esc(r.headline)}</p>
+    <div class="stats">
+      <div><b>${numHtml(fmt(c.sessions))}</b><span>sessions</span></div>
+      <div><b>${numHtml(c.spend ? '$' + Math.round(c.spend) : '—')}</b><span>recorded spend</span></div>
+      <div><b>${numHtml(c.agentHours + ' h')}</b><span>of agent work</span></div>
+      <div><b class="txt">${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)}` : 'main task'}</span></div>
+    </div>
+    <h3 class="good">What went well</h3>${rows(r.wentWell, 'better')}
+    <h3 class="bad">What didn't</h3>${rows(r.didntGoWell, 'worse')}
+    <h3 class="change">What to change</h3>${r.change.length ? r.change.map((it) => `<div class="drow kinded"><span class="kind ${esc(it.kind)}">${esc(it.kind)}</span><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}</div>`).join('') : none('Nothing to change.')}
+    <h3 class="next">Try next ${esc(r.period.unit)}</h3>${r.actions.length ? r.actions.map((x, i) => `<div class="drow"><span class="n">${String(i + 1).padStart(2, '0')}</span><b>${esc(x.title)}</b>${x.metric ? `<span>Watch ${esc(x.metric.label)}, now ${esc(x.metric.display)}</span>` : ''}</div>`).join('') : none('Nothing to do next.')}
+    ${f ? `<h3>Did it work?</h3>${f.items.map((it) => `<div class="drow">${vdot(it.verdict)}<b>${esc(it.title)}</b>${it.metric ? `<span>${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})</span>` : ''}</div>`).join('')}` : ''}
     <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Keep it in your notes, or next to the code.</span></div>`;
   $('copyMd').addEventListener('click', async () => {
     try { const md = await fetch('/api/retro.md?' + query()).then((x) => x.text()); await navigator.clipboard.writeText(md); $('copyStatus').textContent = 'Copied.'; }
