@@ -1,0 +1,40 @@
+retro.mjs
+  s_135e7898200b4f::t_5a1a57f2f7f55a 62
+  s_135e7898200b4f::t_c63aeffcd74548 90-91
+ui.mjs
+  s_135e7898200b4f::t_e87edb2505fc8f 31,42
+sessions.mjs
+  s_135e7898200b4f::t_c63aeffcd74548 577,579,583-586,588-597,638
+ui/index.html
+  s_135e7898200b4f::t_108760a1bfbfc0 804,1021
+  s_135e7898200b4f::t_19af87e6768990 347-350,352-385,515-531,1006,1009,1012-1016,1020,1028,1054,1057-1060,1564-1582,1584-1594,1596-1665,1715,1728,1731-1732,1787,1835-1842
+  s_135e7898200b4f::t_943faf98e806a0 351,1011
+tests.mjs
+  s_135e7898200b4f::t_7809bb65128ec3 616-634
+  s_135e7898200b4f::t_fc230f762ecd7f 658-660
+README.md
+  s_135e7898200b4f::t_54df655172c326 104-107,118-121,299,391
+CHANGELOG.md
+  s_135e7898200b4f::t_54df655172c326 48
+agent-retro.mjs
+  s_135e7898200b4f::t_b9861eb47dccdb 54,121-122,219-220,226-229,232-234,244,246-252,261,907-908
+  s_135e7898200b4f::t_e87edb2505fc8f 72
+  s_135e7898200b4f::t_43bf4398138310 576
+  s_135e7898200b4f::t_c6f9b6265e930d 254,573
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "15c48347546253d3ee4086548585d43adbd3204a",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
