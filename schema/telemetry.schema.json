@@ -1,0 +1,1107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-retro:telemetry:v1",
+  "title": "agent-retro telemetry bundle, schema v1",
+  "description": "telemetry.json is a Telemetry document; each line of sessions.jsonl is a Session.",
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "ranked": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      }
+    },
+    "taskId": {
+      "type": "string",
+      "enum": [
+        "code-review",
+        "debugging",
+        "testing",
+        "feature",
+        "refactor",
+        "planning",
+        "ui-design",
+        "performance",
+        "docs",
+        "git-ops",
+        "deploy-ops",
+        "research",
+        "agent-setup",
+        "other"
+      ]
+    },
+    "textLevel": {
+      "type": "string",
+      "enum": [
+        "none",
+        "excerpts",
+        "full"
+      ]
+    },
+    "Telemetry": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "generator",
+        "generatedAt",
+        "textLevel",
+        "filters",
+        "rollup"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "generator": {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "textLevel": {
+          "$ref": "#/$defs/textLevel"
+        },
+        "filters": {
+          "type": "object",
+          "required": [
+            "days",
+            "project",
+            "agent",
+            "allAgents"
+          ],
+          "properties": {
+            "days": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "project": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "agent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "allAgents": {
+              "type": "boolean"
+            }
+          }
+        },
+        "rollup": {
+          "type": "object",
+          "required": [
+            "scope",
+            "volume",
+            "tasks",
+            "tools",
+            "tokens",
+            "cost",
+            "context",
+            "skills",
+            "sessions",
+            "contextBreakdown",
+            "subagentTypes",
+            "risk",
+            "recommendations",
+            "inventory",
+            "toolErrors",
+            "time",
+            "workflows",
+            "trend",
+            "extensions",
+            "prompting"
+          ],
+          "properties": {
+            "scope": {
+              "type": "object",
+              "required": [
+                "files",
+                "activeDays"
+              ]
+            },
+            "volume": {
+              "type": "object",
+              "required": [
+                "prompts",
+                "humanPrompts",
+                "toolCalls"
+              ]
+            },
+            "tools": {
+              "type": "object",
+              "required": [
+                "total",
+                "byName",
+                "buckets"
+              ]
+            },
+            "tokens": {
+              "type": "object",
+              "required": [
+                "total",
+                "input",
+                "output",
+                "cacheRead",
+                "cacheWrite"
+              ]
+            },
+            "cost": {
+              "type": "object",
+              "required": [
+                "usd"
+              ]
+            },
+            "context": {
+              "type": "object",
+              "required": [
+                "median",
+                "p90",
+                "max"
+              ]
+            },
+            "skills": {
+              "$ref": "#/$defs/counts"
+            },
+            "sessions": {
+              "type": "object",
+              "required": [
+                "count"
+              ]
+            },
+            "tasks": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/taskId"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "sessions",
+                  "share",
+                  "medianTurns",
+                  "medianMinutes",
+                  "medianToolCalls",
+                  "totalCost",
+                  "medianCost",
+                  "toolErrorRate",
+                  "correctionRate",
+                  "fixLoops",
+                  "topTools",
+                  "topShell",
+                  "topSkills",
+                  "compactions",
+                  "highContextTurns",
+                  "sensitiveAccess",
+                  "destructiveCommands",
+                  "contextSources"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "sessions": {
+                    "type": "number"
+                  },
+                  "share": {
+                    "type": "number"
+                  },
+                  "medianTurns": {
+                    "type": "number"
+                  },
+                  "medianMinutes": {
+                    "type": "number"
+                  },
+                  "medianToolCalls": {
+                    "type": "number"
+                  },
+                  "totalCost": {
+                    "type": "number"
+                  },
+                  "medianCost": {
+                    "type": "number"
+                  },
+                  "toolErrorRate": {
+                    "type": "number"
+                  },
+                  "correctionRate": {
+                    "type": "number"
+                  },
+                  "fixLoops": {
+                    "type": "number"
+                  },
+                  "topTools": {
+                    "$ref": "#/$defs/ranked"
+                  },
+                  "topShell": {
+                    "$ref": "#/$defs/ranked"
+                  },
+                  "topSkills": {
+                    "$ref": "#/$defs/ranked"
+                  },
+                  "compactions": {
+                    "type": "number"
+                  },
+                  "highContextTurns": {
+                    "type": "number"
+                  },
+                  "sensitiveAccess": {
+                    "type": "number"
+                  },
+                  "destructiveCommands": {
+                    "type": "number"
+                  },
+                  "contextSources": {
+                    "type": "object",
+                    "propertyNames": {
+                      "$ref": "#/$defs/contextSource"
+                    },
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            },
+            "contextBreakdown": {
+              "type": "object",
+              "required": [
+                "sessionsMeasured",
+                "sources",
+                "toolOutputByTool",
+                "compactions",
+                "compactedSessions",
+                "highContextTurns",
+                "apiErrors"
+              ]
+            },
+            "subagentTypes": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "runs",
+                  "sessions",
+                  "toolCalls",
+                  "errors",
+                  "tokens",
+                  "outputTokens"
+                ]
+              }
+            },
+            "risk": {
+              "type": "object",
+              "required": [
+                "sensitiveAccess",
+                "destructiveCommands",
+                "sessionsWithErrorBursts"
+              ],
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "inventory": {
+              "type": "object",
+              "required": [
+                "sessionsMeasured",
+                "skills",
+                "mcpServers"
+              ],
+              "description": "Installed skills and MCP servers listed in context versus used. tokens = estimated per-session listing cost."
+            },
+            "recommendations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "level",
+                  "title",
+                  "action"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "high",
+                      "medium",
+                      "low"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "description": "Omitted at text level none when personal"
+                  },
+                  "action": {
+                    "type": "string"
+                  },
+                  "personal": {
+                    "type": "boolean"
+                  },
+                  "fix": {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "target",
+                      "content"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "settings",
+                          "shell",
+                          "file",
+                          "claude-md",
+                          "manual"
+                        ]
+                      },
+                      "target": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "trend": {
+                    "$ref": "#/$defs/trendMetric"
+                  },
+                  "task": {
+                    "$ref": "#/$defs/taskId"
+                  }
+                }
+              }
+            },
+            "toolErrors": {
+              "type": "object",
+              "required": [
+                "total",
+                "rejected",
+                "blocked",
+                "byClass",
+                "byTool"
+              ]
+            },
+            "time": {
+              "type": "object",
+              "required": [
+                "agentMinutes",
+                "waitMinutes",
+                "awayMinutes",
+                "medianResponseSec"
+              ]
+            },
+            "workflows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "steps",
+                  "sessions",
+                  "runs"
+                ],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sessions": {
+                    "type": "number"
+                  },
+                  "runs": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "trend": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "boundary",
+                "mode",
+                "sessions",
+                "metrics"
+              ],
+              "properties": {
+                "metrics": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/trendMetric"
+                  }
+                }
+              },
+              "description": "Null when either period has fewer than 3 sessions."
+            },
+            "extensions": {
+              "type": "object",
+              "required": [
+                "sessionsMeasured",
+                "plugins",
+                "skills",
+                "mcpServers",
+                "hooks",
+                "commands"
+              ],
+              "properties": {
+                "plugins": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "enabledKey",
+                      "skillsListed",
+                      "skillsUsed",
+                      "uses",
+                      "mcpServers",
+                      "commandsUsed",
+                      "listingTokens",
+                      "sessionsLoaded",
+                      "verdict"
+                    ],
+                    "properties": {
+                      "verdict": {
+                        "$ref": "#/$defs/verdict"
+                      }
+                    }
+                  }
+                },
+                "skills": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "plugin",
+                      "uses",
+                      "sessionsUsed",
+                      "sessionsLoaded",
+                      "listingTokens",
+                      "tokensPerLoad",
+                      "lastUsed",
+                      "verdict"
+                    ],
+                    "properties": {
+                      "verdict": {
+                        "$ref": "#/$defs/verdict"
+                      }
+                    }
+                  }
+                },
+                "mcpServers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "name",
+                      "source",
+                      "calls",
+                      "sessionsUsed",
+                      "sessionsLoaded",
+                      "errors",
+                      "errorRate",
+                      "topError",
+                      "outputTokens",
+                      "listingTokens",
+                      "verdict"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "project",
+                          "plugin",
+                          "claude.ai",
+                          "built-in"
+                        ]
+                      },
+                      "verdict": {
+                        "$ref": "#/$defs/verdict"
+                      }
+                    }
+                  }
+                },
+                "hooks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "event",
+                      "runs",
+                      "sessions",
+                      "medianMs",
+                      "p90Ms",
+                      "failures",
+                      "injectedTokens",
+                      "tokensPerSession",
+                      "commands"
+                    ]
+                  }
+                },
+                "commands": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "uses",
+                      "sessions",
+                      "lastUsed"
+                    ]
+                  }
+                }
+              },
+              "description": "Plugins, skills, MCP servers, hooks and slash commands: loaded vs used, cost and failures, from session logs."
+            },
+            "prompting": {
+              "type": "object",
+              "required": [
+                "openings",
+                "types",
+                "practices",
+                "style",
+                "summary",
+                "vagueShare",
+                "vagueExamples"
+              ],
+              "description": "Prompt-engineering practices detected in your prompts (pattern-based: presence, not quality), with outcomes of opening prompts with and without each practice.",
+              "properties": {
+                "practices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "label",
+                      "why",
+                      "share",
+                      "sessions",
+                      "outcome"
+                    ]
+                  }
+                },
+                "vagueExamples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "missing",
+                      "followUps"
+                    ]
+                  },
+                  "description": "Redacted; empty at text level none"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Session": {
+      "type": "object",
+      "required": [
+        "id",
+        "agent",
+        "project",
+        "start",
+        "end",
+        "durationMin",
+        "title",
+        "branch",
+        "turns",
+        "tools",
+        "files",
+        "skills",
+        "mcpServers",
+        "commands",
+        "subagents",
+        "tokens",
+        "costUsd",
+        "peakContext",
+        "models",
+        "signals",
+        "task",
+        "text",
+        "context",
+        "risk",
+        "time"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "start": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "durationMin": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turns": {
+          "type": "object",
+          "required": [
+            "human",
+            "assistant",
+            "ack",
+            "pushback",
+            "interruptions"
+          ],
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "tools": {
+          "type": "object",
+          "required": [
+            "total",
+            "errors",
+            "byName",
+            "buckets",
+            "shell",
+            "rejected",
+            "blocked",
+            "errorsByTool",
+            "errorsByClass"
+          ],
+          "properties": {
+            "total": {
+              "type": "number"
+            },
+            "errors": {
+              "type": "number"
+            },
+            "byName": {
+              "$ref": "#/$defs/counts"
+            },
+            "buckets": {
+              "$ref": "#/$defs/counts"
+            },
+            "shell": {
+              "$ref": "#/$defs/counts",
+              "description": "Normalized command heads, e.g. 'git diff', 'npm test'"
+            },
+            "rejected": {
+              "type": "number",
+              "description": "Tool calls you declined; not counted as errors"
+            },
+            "blocked": {
+              "type": "number",
+              "description": "Tool calls stopped by a guard or policy; not counted as errors"
+            },
+            "errorsByTool": {
+              "$ref": "#/$defs/counts"
+            },
+            "errorsByClass": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/errorClass"
+              },
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "files": {
+          "type": "object",
+          "required": [
+            "edited",
+            "read",
+            "testEdits",
+            "docEdits"
+          ],
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "skills": {
+          "$ref": "#/$defs/counts"
+        },
+        "mcpServers": {
+          "$ref": "#/$defs/counts"
+        },
+        "commands": {
+          "$ref": "#/$defs/counts"
+        },
+        "subagents": {
+          "type": "object",
+          "required": [
+            "runs",
+            "toolCalls",
+            "types",
+            "byType"
+          ],
+          "properties": {
+            "runs": {
+              "type": "number",
+              "description": "Agent/Task tool calls made by the main thread"
+            },
+            "toolCalls": {
+              "type": "number"
+            },
+            "types": {
+              "$ref": "#/$defs/counts"
+            },
+            "byType": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "runs",
+                  "toolCalls",
+                  "errors",
+                  "tokens",
+                  "outputTokens"
+                ],
+                "additionalProperties": {
+                  "type": "number"
+                }
+              },
+              "description": "Per subagent type: distinct runs, tool calls, tool errors, tokens (context + output) and output tokens. No USD: logs record cost per session only."
+            }
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "required": [
+            "input",
+            "output",
+            "cacheRead",
+            "cacheWrite",
+            "total"
+          ],
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "costUsd": {
+          "type": "number"
+        },
+        "peakContext": {
+          "type": "number"
+        },
+        "models": {
+          "$ref": "#/$defs/counts"
+        },
+        "signals": {
+          "type": "object",
+          "required": [
+            "testRuns",
+            "fixLoops",
+            "toolErrorRate",
+            "correctionRate",
+            "ackRate"
+          ],
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "task": {
+          "type": "object",
+          "required": [
+            "primary",
+            "secondary",
+            "confidence",
+            "scores"
+          ],
+          "properties": {
+            "primary": {
+              "$ref": "#/$defs/taskId"
+            },
+            "secondary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/taskId"
+              }
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "scores": {
+              "$ref": "#/$defs/counts"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "rules",
+                "manual"
+              ]
+            },
+            "rulePrimary": {
+              "$ref": "#/$defs/taskId",
+              "description": "What the rules said, when a manual label overrides it"
+            }
+          }
+        },
+        "text": {
+          "type": "object",
+          "required": [
+            "level"
+          ],
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/textLevel"
+            },
+            "prompts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "context": {
+          "type": "object",
+          "description": "Estimated (chars/4) tokens that entered the main thread's context window, by source. Subagents run in separate windows and are excluded.",
+          "required": [
+            "estimated",
+            "sources",
+            "toolOutputByTool",
+            "compactions",
+            "compactPreTokens",
+            "highContextTurns",
+            "apiErrors"
+          ],
+          "properties": {
+            "estimated": {
+              "type": "boolean",
+              "description": "false when the agent's logs carry no content to estimate from"
+            },
+            "sources": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/contextSource"
+              },
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "toolOutputByTool": {
+              "$ref": "#/$defs/counts"
+            },
+            "compactions": {
+              "type": "number"
+            },
+            "compactPreTokens": {
+              "type": "number"
+            },
+            "highContextTurns": {
+              "type": "number",
+              "description": "Main-thread turns with more than 150k input tokens"
+            },
+            "apiErrors": {
+              "type": "number"
+            }
+          }
+        },
+        "risk": {
+          "type": "object",
+          "required": [
+            "sensitiveAccess",
+            "destructiveCommands",
+            "maxErrorsPerTurn"
+          ],
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "sensitiveAccess: tool calls touching .env, keys, credentials, ~/.ssh. destructiveCommands: rm -rf outside build/cache/temp dirs, force-push, hard reset, DROP TABLE. maxErrorsPerTurn: most tool errors between two human prompts."
+        },
+        "time": {
+          "type": "object",
+          "required": [
+            "agentMinutes",
+            "waitMinutes",
+            "awayMinutes",
+            "medianResponseSec"
+          ],
+          "properties": {
+            "agentMinutes": {
+              "type": "number"
+            },
+            "waitMinutes": {
+              "type": "number"
+            },
+            "awayMinutes": {
+              "type": "number"
+            },
+            "medianResponseSec": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "description": "Agent working time (gaps between its consecutive actions, each \u226430 min), your time to reply, and longer gaps (away)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "contextSource": {
+      "type": "string",
+      "enum": [
+        "system",
+        "memory",
+        "toolDefs",
+        "skills",
+        "hooks",
+        "reminders",
+        "userText",
+        "files",
+        "toolInput",
+        "toolOutput",
+        "reasoning",
+        "assistantText"
+      ]
+    },
+    "errorClass": {
+      "type": "string",
+      "enum": [
+        "rejected",
+        "blocked",
+        "service",
+        "timeout",
+        "environment",
+        "stale-file",
+        "invalid-input",
+        "not-found",
+        "permission",
+        "command-failed",
+        "other",
+        "unknown"
+      ]
+    },
+    "trendMetric": {
+      "type": "object",
+      "required": [
+        "label",
+        "share",
+        "before",
+        "after",
+        "change",
+        "verdict"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "share": {
+          "type": "boolean"
+        },
+        "before": {
+          "type": "number"
+        },
+        "after": {
+          "type": "number"
+        },
+        "change": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "better",
+            "worse",
+            "flat"
+          ]
+        },
+        "metric": {
+          "type": "string"
+        },
+        "usd": {
+          "type": "boolean"
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "used",
+        "rarely used",
+        "unused",
+        "no activity"
+      ]
+    }
+  }
+}
