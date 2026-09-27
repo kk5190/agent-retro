@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * cc-habits UI — a local web dashboard for the habits analyzer.
+ * agent-retro UI — the local dashboard.
  *
- * Started via `cc-habits --ui` (or `node ui.mjs`). Serves a self-contained page at
- * http://127.0.0.1:<port>/ and JSON at /api/data and /api/meta.
+ * Started via `agent-retro --ui` (or `node ui.mjs`). Serves a self-contained page at
+ * http://127.0.0.1:<port>/ and JSON at /api/data (rollup), /api/sessions (session
+ * records, `?task=` to filter) and /api/meta. POST /api/reload drops cached results; POST
+ * /api/label { sessionId, task } corrects a session's task label (same-origin JSON only).
  *
  * No external assets, no network access beyond localhost.
  */
@@ -12,8 +14,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { loadAll, loadRecords, loadHistory, analyze } from './habits.mjs';
+import { loadTelemetry, loadHistory, writeLabel, CONTEXT_LABELS } from './agent-retro.mjs';
+import { TASKS } from './sessions.mjs';
 import { PARSABLE } from './agents.mjs';
+import { sessionView } from './telemetry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = path.join(__dirname, 'ui', 'index.html');
@@ -29,35 +33,45 @@ function queryOpts(q) {
   };
 }
 
+/** Rollup + sessions for one filter combination, parsed once and cached. */
 async function build(q) {
-  const key = JSON.stringify(q);
+  const { task, ...filters } = q;
+  const key = JSON.stringify(filters);
   if (cache.has(key)) return cache.get(key);
-  const o = queryOpts(q);
-  const data = await loadAll(o);
-  const hist = loadHistory(o);
-  const analysis = analyze(data, o);
-  const result = { ...analysis, cliHistory: o.history ? hist : null };
+  const o = queryOpts(filters);
+  const { analysis, sessions } = await loadTelemetry(o);
+  const result = { analysis: { ...analysis, cliHistory: o.history ? loadHistory(o) : null }, sessions };
   if (cache.size > 32) cache.clear();
   cache.set(key, result);
   return result;
 }
 
 async function meta() {
-  const key = '__meta__';
-  if (cache.has(key)) return cache.get(key);
-  const o = queryOpts({});
-  const data = await loadRecords(o);
-  const analysis = analyze(data, o);
-  const result = {
+  const { analysis } = await build({});
+  return {
     projects: Object.keys(analysis.projects).sort(),
     agents: ['claude', ...PARSABLE],
-    files: data.files.length,
+    contextLabels: CONTEXT_LABELS,
+    tasks: [...TASKS.map((t) => ({ id: t.id, label: t.label })), { id: 'other', label: 'Other' }],
+    files: analysis.scope.files,
     first: analysis.scope.first,
     last: analysis.scope.last,
-    transcripts: fs.existsSync(path.join(process.env.HOME || '', '.claude', 'transcripts')),
+    transcripts: fs.existsSync(path.join(process.env.AGENT_RETRO_HOME || process.env.HOME || '', '.claude', 'transcripts')),
   };
-  cache.set(key, result);
-  return result;
+}
+
+/** Writes only from the dashboard itself: same origin, JSON body (so other sites cannot post here). */
+function sameOrigin(req, host, port) {
+  const origin = req.headers.origin;
+  return (!origin || origin === `http://${host}:${port}` || origin === `http://localhost:${port}`) && /^application\/json\b/.test(req.headers['content-type'] || '');
+}
+function readBody(req, limit = 4096) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > limit) { reject(new Error('body too large')); req.destroy(); } });
+    req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch { reject(new Error('body is not JSON')); } });
+    req.on('error', reject);
+  });
 }
 
 function sendJson(res, code, obj) {
@@ -81,9 +95,20 @@ export function startUi(o = {}) {
           return;
         }
         if (url.pathname === '/api/meta') return sendJson(res, 200, await meta());
-        if (url.pathname === '/api/data') {
-          const q = Object.fromEntries(url.searchParams.entries());
-          return sendJson(res, 200, await build(q));
+        if (req.method === 'POST' && !sameOrigin(req, host, port)) return sendJson(res, 403, { error: 'writes are only accepted from the dashboard itself' });
+        if (url.pathname === '/api/reload' && req.method === 'POST') { cache.clear(); return sendJson(res, 200, { ok: true }); }
+        if (url.pathname === '/api/label' && req.method === 'POST') {
+          const { sessionId, task } = await readBody(req);
+          try { writeLabel(sessionId, task || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
+          cache.clear();
+          return sendJson(res, 200, { ok: true });
+        }
+        const q = Object.fromEntries(url.searchParams.entries());
+        if (url.pathname === '/api/data') return sendJson(res, 200, (await build(q)).analysis);
+        if (url.pathname === '/api/sessions') {
+          const { sessions } = await build(q);
+          const list = q.task ? sessions.filter((s) => s.task.primary === q.task) : sessions;
+          return sendJson(res, 200, { total: list.length, sessions: list.slice(0, 500).map((s) => sessionView(s, o.text || 'excerpts')) });
         }
         sendJson(res, 404, { error: 'not found' });
       } catch (err) {
@@ -93,10 +118,9 @@ export function startUi(o = {}) {
 
     server.listen(port, host, () => {
       const link = `http://${host}:${port}/`;
-      console.log(`cc-habits UI  →  ${link}`);
+      console.log(`agent-retro UI  →  ${link}`);
       console.log('Press Ctrl-C to stop.');
-      if (o.open && process.platform === 'darwin') exec(`open ${link}`);
-      else if (o.open && process.platform === 'linux') exec(`xdg-open ${link}`);
+      if (o.open) exec(process.platform === 'darwin' ? `open ${link}` : process.platform === 'win32' ? `start "" "${link}"` : `xdg-open ${link}`);
     });
 
     const shutdown = () => { server.close(() => resolve()); };
