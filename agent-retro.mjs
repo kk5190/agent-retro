@@ -49,8 +49,9 @@
  *   --demo                  Use a built-in month of synthetic sessions instead of your logs
  *   --retro                 Print only the monthly review (with --md: markdown)
  *   --save-retro            Save this review's actions so the next one shows whether they worked
- *   --period <date>         Review the period containing <date> (default: the last completed one)
+ *   --period <date>         Limit everything to the period containing <date>, and review it
  *   --scope <s>             Limit the whole analysis to current | last | all (default all)
+ *   --unit <u>              Review by month (default), week or day
  *   --cycle-start <date>    Review in cycles instead of calendar months: any cycle's first day
  *   --cycle-days <n>        Cycle length in days (default 14)
  *   --save-cycle            Remember --cycle-start/--cycle-days in ~/.agent-retro/config.json;
@@ -68,7 +69,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket, TREND_MIN_SESSIONS } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, periodUnits, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket, TREND_MIN_SESSIONS, UNIT_CYCLES, unitOf } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -117,6 +118,7 @@ function parseArgs(argv) {
       case '--cycle-days': o.cycleDays = Number(next()); break;
       case '--period': o.periodPick = next(); break;
       case '--scope': o.scope = next(); break;
+      case '--unit': o.unit = next(); break;
       case '--save-cycle': o.saveCycle = true; break;
       case '--no-history': o.history = false; break;
       case '--all-sources': o.allSources = true; break;
@@ -213,14 +215,21 @@ export function writeLabel(sessionId, task) {
 /**
  * Load every selected agent's events once and derive everything from that one stream.
  * `o.scope` narrows the view: 'current' (the period in progress), 'last' (the one before it) or
- * 'all' (default). Periods are calendar months, or a cycle from flags or ~/.agent-retro/config.json.
+ * 'all' (default). Periods are calendar months, or a cycle from flags or ~/.agent-retro/config.json,
+ * or weeks or days with `o.unit`.
  */
 export async function loadTelemetry(o) {
   const { events, files, parseErrors } = await loadEvents(o);
   const allSessions = buildSessions(events, { ...o, labels: o.labels || readLabels() });
-  const cycle = o.cycleStart ? { start: o.cycleStart, days: o.cycleDays || 14 } : readConfig().cycle || null;
+  const configured = o.cycleStart ? { start: o.cycleStart, days: o.cycleDays || 14 } : readConfig().cycle || null;
+  // --unit week|day reviews by week or day instead; month (the default) means months, or the configured cycle
+  const cycle = UNIT_CYCLES[o.unit] || configured;
   const windows = periodWindows(allSessions, cycle);
-  const scopeWindow = o.scope === 'current' ? windows[0] || null : o.scope === 'last' ? windows[1] || null : null;
+  const pick = o.periodPick ? localDay(o.periodPick) : null;
+  const picked = pick != null ? windows.find((w) => pick >= w.from && pick < w.to) || null : null;
+  // --scope wins; otherwise --period limits everything to the period it names
+  const scopeName = o.scope || (picked ? 'period' : 'all');
+  const scopeWindow = scopeName === 'current' ? windows[0] || null : scopeName === 'last' ? windows[1] || null : scopeName === 'period' ? picked : null;
   const inWindow = (t) => !scopeWindow || (t != null && t >= scopeWindow.from && t < scopeWindow.to);
   const sessions = scopeWindow ? allSessions.filter((s) => inWindow(s.start)) : allSessions;
   // scope events by session, like the retro: a session belongs to the period it started in (cost records carry no timestamp)
@@ -229,13 +238,13 @@ export async function loadTelemetry(o) {
   data.files = files; data.parseErrors = parseErrors;
   data.sessions = sessions.filter((s) => s.start).map((s) => ({ proj: s.project, turns: s.turns.assistant, first: s.start, last: s.end, agent: s.agent }));
   const analysis = analyze(data, o, sessions);
-  const pick = o.periodPick ? localDay(o.periodPick) : null;
-  const selected = scopeWindow || (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultPeriod(windows);
+  const selected = scopeWindow || picked || defaultPeriod(windows);
   const before = selected ? windows[windows.indexOf(selected) + 1] || null : null;
   const isoDay = localDate;
-  const unit = cycle ? 'cycle' : 'month';
-  analysis.view = { scope: scopeWindow ? o.scope : 'all', unit, name: scopeWindow ? periodName(scopeWindow, cycle) : 'all sessions', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), sessions: sessions.length };
-  analysis.period = { unit, cycle, windows: windows.map((w) => ({ name: periodName(w, cycle), from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null, compareMin: TREND_MIN_SESSIONS };
+  const unit = unitOf(cycle);
+  const units = periodUnits(allSessions).map((u) => (u === 'month' && configured ? 'cycle' : u));
+  analysis.view = { scope: scopeWindow ? scopeName : 'all', unit, name: scopeWindow ? periodName(scopeWindow, cycle) : 'all sessions', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), sessions: sessions.length };
+  analysis.period = { unit, units, cycle: configured, windows: windows.map((w) => ({ name: periodName(w, cycle), from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null, compareMin: TREND_MIN_SESSIONS };
   analysis.trend = comparePeriods(allSessions, o.split ? { split: Date.parse(o.split) } : { window: selected, previous: before });
   if (analysis.trend && !o.split) Object.assign(analysis.trend, { unit, period: periodName(selected, cycle) });
   const config = readClaudeConfig();
@@ -555,7 +564,8 @@ const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v
 const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
 
 const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"]];
-const reviewTitle = (r) => (r.period.unit === 'cycle' ? 'Cycle review' : 'Monthly review');
+const REVIEW_TITLE = { month: 'Monthly review', week: 'Weekly review', day: 'Daily review', cycle: 'Cycle review' };
+const reviewTitle = (r) => REVIEW_TITLE[r.period.unit] || 'Monthly review';
 const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.name}${r.period.current ? ' (in progress)' : ''}`);
 const MARK = { text: { better: '✓', worse: '✗' }, md: { better: '✅', worse: '❌' } };
 /** What to watch on a Do next item, and whether it is the experiment. */
@@ -885,6 +895,7 @@ async function main() {
   }
   if (o.cycleStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.cycleStart) || Number.isNaN(Date.parse(o.cycleStart)))) { console.error('--cycle-start needs a date like 2026-09-16'); process.exit(2); }
   if (o.periodPick && Number.isNaN(Date.parse(o.periodPick))) { console.error('--period needs a date like 2026-09-20'); process.exit(2); }
+  if (o.unit && !['month', 'week', 'day'].includes(o.unit)) { console.error('--unit must be month, week or day'); process.exit(2); }
   if (o.scope && !['current', 'last', 'all'].includes(o.scope)) { console.error('--scope is current, last or all'); process.exit(2); }
   if (o.saveCycle) {
     try { writeCycleConfig(o.cycleStart ? { start: o.cycleStart, days: o.cycleDays || 14 } : null); } catch (err) { console.error(err.message); process.exit(2); }

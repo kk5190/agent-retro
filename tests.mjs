@@ -613,6 +613,22 @@ test('periods: a custom cycle gives aligned windows', async () => {
   assert.equal(new Date(w[1].from).getDay(), 3, 'cycles start on the chosen weekday');
 });
 
+test('periods: weeks and days are offered only when your own sessions fill them', async () => {
+  const { buildSessions, periodUnits, periodWindows, periodName, UNIT_CYCLES, localDay } = await import('./sessions.mjs');
+  const now = localDay('2026-09-27') + 12 * 3600e3; // a Sunday
+  // perDay sessions on every `gap`-th of the last `days` days
+  const make = (perDay, days, gap = 1) => buildSessions(Array.from({ length: perDay * days }, (_, i) => ({
+    agent: 'x', sessionId: `s${i}`, ts: now - (1 + gap * Math.floor(i / perDay)) * 864e5 + (i % perDay) * 60e3, role: 'user', text: 'fix the failing checkout test',
+  })));
+  assert.deepEqual(periodUnits(make(1, 30, 2), { now }), ['month'], 'about 3 a week: months only');
+  assert.deepEqual(periodUnits(make(1, 60), { now }), ['week', 'month'], '7 a week: weeks too');
+  assert.deepEqual(periodUnits(make(6, 30), { now }), ['day', 'week', 'month'], '6 a day: days too');
+  const wk = periodWindows(make(1, 20), UNIT_CYCLES.week, { now });
+  assert.equal(new Date(wk[0].from).getDay(), 1, 'weeks start on Monday');
+  assert.equal(periodName(wk[1], UNIT_CYCLES.week), 'Week of September 14, 2026');
+  assert.equal(periodName(periodWindows(make(1, 3), UNIT_CYCLES.day, { now })[1], UNIT_CYCLES.day), 'September 26, 2026');
+});
+
 test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back to months; --period picks one', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-cycle-'));
   writeFixtures(home); // the Claude fixture sessions fall on 2026-03-01
@@ -628,6 +644,12 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   assert.equal(run('--save-cycle').status, 0);
   assert.equal(cfg().cycle, undefined);
   assert.match(run('--retro', '--period', '2026-03-01').stdout, /MONTHLY REVIEW · March 2026/);
+  // --period limits the whole analysis to that month, like --scope current does; --scope all widens it again
+  const view = (...args) => JSON.parse(run('--json', '--all-agents', ...args).stdout).view;
+  const march = view('--period', '2026-03-15');
+  assert.equal(march.scope, 'period'); assert.equal(march.from, '2026-03-01'); assert.equal(march.to, '2026-03-31');
+  assert.equal(view('--period', '2026-01-15').from, '2026-01-01', 'any month with sessions, not only the last two');
+  assert.equal(view('--period', '2026-03-15', '--scope', 'all').scope, 'all');
 });
 
 test('editing: blind edits, rewrites, rework and what you interrupted, per thread', () => {

@@ -7,7 +7,7 @@
  * review's actions, baseline → now. No new analysis happens here; every item points at the section
  * holding its numbers.
  */
-import { TREND_METRICS, compareMetric, localDate, periodName, MIN_PERIOD_SESSIONS } from './sessions.mjs';
+import { TREND_METRICS, compareMetric, localDate, periodName, MIN_PERIOD_SESSIONS, unitOf } from './sessions.mjs';
 import { REC_METRIC, PLAYBOOKS } from './recommend.mjs';
 
 const MAX = 4;
@@ -43,7 +43,7 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   const a = analysis;
   const { list, from, to } = periodSessions(sessions, window);
   const iso = (t) => (t ? localDate(t) : null); // local calendar day, like the period boundaries
-  const unit = cycle ? 'cycle' : 'month';
+  const unit = unitOf(cycle);
   const recs = a.recommendations || [];
 
   // Period card
@@ -87,7 +87,7 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
 
   // One experiment to measure, and Did it work?: the last saved review's actions, baseline → now
   const exp = actions.find((x) => x.metric);
-  const experiment = exp ? { title: exp.title, metric: exp.metric, span: cycle ? `${cycle.days} days` : 'month',
+  const experiment = exp ? { title: exp.title, metric: exp.metric, span: unit === 'cycle' ? `${cycle.days} days` : unit,
     check: `agent-retro --retro at the end of next ${unit}` } : null;
 
   // Change: one list, so nothing is said twice. The Do next items lead, numbered, with the metric to

@@ -45,7 +45,7 @@
 - **Local dashboard, reports and exports:**
   - a dashboard with a Home page (verdict, five areas with a status and a peek, what to do next,
     whether last month's changes worked), focused pages for the review, work, cost, setup, habits
-    and sessions, one time-period switch (this month, last month, all time), and a summary page
+    and sessions, one period picker (any month with sessions, or all time; weeks and days too when your sessions fill them), and a summary page
   - a quiet visual language: warm grey with one blue accent, charts that grey out everything but
     the value that matters, half-circle gauges per area, a 24-hour clock of when you prompt, and
     light and dark themes

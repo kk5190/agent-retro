@@ -575,6 +575,28 @@ export const localDay = (iso) => { const [y, m, d] = String(iso).split('-').map(
 export const MIN_PERIOD_SESSIONS = 5;
 
 /**
+ * Weeks (from Monday) and days are cycles with a name: the same windows, the same trend. Any past
+ * Monday works as the start.
+ */
+export const UNIT_CYCLES = { week: { start: '2024-01-01', days: 7, unit: 'week' }, day: { start: '2024-01-01', days: 1, unit: 'day' } };
+/** The period's unit: month, week, day, or a configured cycle. */
+export const unitOf = (cycle) => (!cycle ? 'month' : cycle.unit || 'cycle');
+
+/**
+ * The review units your own sessions can support, finest first. Month always; a week or a day only
+ * when the median of your last 8 active weeks or days holds MIN_PERIOD_SESSIONS, so a light user is
+ * never offered periods that would all read "too few to judge".
+ */
+export function periodUnits(sessions, { now = Date.now() } = {}) {
+  const units = ['month'];
+  for (const u of ['week', 'day']) {
+    const counts = periodWindows(sessions, UNIT_CYCLES[u], { now }).filter((w) => !w.current && w.sessions).slice(0, 8).map((w) => w.sessions).sort((a, b) => a - b);
+    if (counts.length >= 3 && counts[Math.floor(counts.length / 2)] >= MIN_PERIOD_SESSIONS) units.unshift(u);
+  }
+  return units;
+}
+
+/**
  * Review periods [from, to), newest first; the first is the one in progress at `now`. Without a
  * cycle they are calendar months. With a cycle ({ start: 'YYYY-MM-DD', days }) they repeat every
  * `days` from `start` (any past cycle start will do). They reach back to the earliest session
@@ -608,7 +630,10 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 /** A period's name: "September 2026" for a month, "2026-09-16 → 2026-09-29" for a cycle. */
 export function periodName(w, cycle) {
   if (!w) return 'all sessions';
-  if (!cycle) { const d = new Date(w.from); return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
+  const d = new Date(w.from), day = (x) => `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`;
+  if (!cycle) return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  if (cycle.unit === 'week') return `Week of ${day(d)}`;
+  if (cycle.unit === 'day') return day(d);
   return `${localDate(w.from)} → ${localDate(w.to - 1)}`;
 }
 

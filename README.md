@@ -100,7 +100,11 @@ with the month before:
   action: baseline → now, better or worse.
 
 **Review periods.** Periods are calendar months. The review covers the last **completed** month
-and compares it with the one before; `--period <date>` reviews the period containing any date.
+and compares it with the one before; `--period <date>` limits everything to the period containing
+any date. If your own sessions fill them (a median of 5 or more over your last 8 active weeks or
+days), you can also review **by week or by day**: the dashboard then shows a Day / Week / Month
+switch, and on the command line `--unit week|day` does the same. Lighter use only ever sees months,
+so no period reads "too few to judge".
 If your work runs in fixed cycles instead, give any cycle's first day and its length, under
 *Settings* in the dashboard or:
 
@@ -111,8 +115,8 @@ npx agent-retro --save-cycle                                            # back t
 
 The setting is saved in `~/.agent-retro/config.json`.
 
-**One time period for everything.** The dashboard's *This month / Last month / All time* switch
-sets the period for every page, and sessions count in the period they started in. On the command
+**One time period for everything.** The dashboard's period picker (‹ September 2026 ›, any
+period with sessions, or All time) sets the period for every page, and sessions count in the period they started in. On the command
 line, `--scope current|last|all` does the same (all is the default).
 
 To keep it as markdown, in your notes or next to the code:
@@ -290,7 +294,7 @@ npx agent-retro --ui --open         # http://127.0.0.1:4173
 
 The dashboard (`ui/index.html`) is self-contained, loads no external assets, listens on localhost
 only, and follows your system's light or dark setting. The header has the pages, one time-period
-switch (this month, last month, all time) and a Settings menu for the agent, project and review
+picker (any month, week or day with sessions, or all time) and a Settings menu for the agent, project and review
 period.
 
 - **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
@@ -382,7 +386,8 @@ Vendor formats change without notice. There are four layers of defense:
 --label-accuracy               how often the rules agree with your corrections
 --demo                         synthetic data instead of your logs
 --retro [--md]  --save-retro   print only the retro (paste-ready with --md); save it for the next review
---period <date>                review the period (month) containing <date>
+--period <date>                limit everything to the period containing <date>, and review it
+--unit month|week|day          review by week or day instead of month
 --scope current|last|all       limit the whole analysis to one period
 --cycle-start <date> --cycle-days <n> --save-cycle   review in fixed cycles instead of months
 --scan  --list-agents  --doctor  --errors

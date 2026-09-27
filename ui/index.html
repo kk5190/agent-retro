@@ -328,6 +328,10 @@
   .tabs a[aria-current="page"] { color: var(--ink); background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .06), inset 0 0 0 1px var(--rule); font-weight: 500; }
   .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--inset); }
   .seg button { border: 0; border-radius: 999px; background: transparent; padding: 6px 12px; font-size: 12.5px; color: var(--ink-2); }
+  .seg.period { align-items: center; }
+  .seg.period select { border: 0; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .08); font-weight: 500; padding: 6px 12px; }
+  .seg.period button { width: 30px; padding: 5px 0; font-size: 16px; line-height: 1; }
+  .seg.period button:disabled { opacity: .35; cursor: default; }
   .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
   @media (max-width: 1340px) { .brand { margin-right: auto; } .tabs { order: 5; flex-basis: 100%; margin: 0; } }
   .page[hidden] { display: none; }
@@ -456,10 +460,12 @@
       <a href="#habits" data-page="habits">Habits</a>
       <a href="#sessions" data-page="sessions">Sessions</a>
     </nav>
-    <div class="seg" role="group" aria-label="Time period">
-      <button type="button" data-scope="current">This month</button>
-      <button type="button" data-scope="last">Last month</button>
-      <button type="button" data-scope="all">All time</button>
+    <div class="seg" id="unitSeg" role="group" aria-label="Review by" hidden></div>
+    <div class="seg period" role="group" aria-label="Time period">
+      <button type="button" id="perPrev" aria-label="Previous month">‹</button>
+      <label for="perSel" class="vh">Period</label>
+      <select id="perSel"><option value="current">This month</option><option value="all">All time</option></select>
+      <button type="button" id="perNext" aria-label="Next month">›</button>
     </div>
     <div class="filters" id="filters">
       <label for="agentSel" class="vh">Agents</label>
@@ -919,13 +925,29 @@ function dailyTable(id, series, valueOf, fmtV) {
 /* ---- summary ---- */
 /* ---- review period: calendar months, or a cycle from Settings ---- */
 let UNIT = 'month';
+/** A period's name: "September 2026", "Week of September 21, 2026", or a cycle's date range. */
+const pname = (w, unit) => (unit === 'cycle' ? `${dateStr(w.from)} – ${dateStr(w.to)}` : w.name);
 function renderPeriod(a) {
   const p = a.period || {};
   UNIT = p.unit || 'month';
   const cap = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
-  document.querySelector('[data-scope=current]').textContent = `This ${UNIT}`;
-  document.querySelector('[data-scope=last]').textContent = `Last ${UNIT}`;
-  $('retroTitle').textContent = UNIT === 'cycle' ? 'Cycle review' : 'Monthly review';
+  // every period with sessions, newest first; the newest is "current" so it follows the calendar
+  const W = p.windows || [], v = a.view || {};
+  const val = (w, i) => (i === 0 ? 'current' : w.from);
+  $('perSel').innerHTML = W.map((w, i) => (i === 0 || w.sessions ? `<option value="${esc(val(w, i))}">${esc(pname(w, UNIT))}${i === 0 ? ` (this ${UNIT})` : ''} · ${w.sessions}</option>` : '')).join('') + '<option value="all">All time</option>';
+  const at = v.scope === 'all' ? -1 : W.findIndex((w) => w.from === v.from);
+  $('perSel').value = at < 0 ? 'all' : val(W[at], at);
+  // Week and day appear only when your own sessions fill them (see periodUnits); month is always there
+  const units = p.units || [UNIT];
+  if (!units.includes(UNIT) && UNIT_PICK !== 'month') { setUnit('month'); setScope('current'); load(); return; } // a saved week/day your data no longer fills
+  $('unitSeg').hidden = units.length < 2;
+  $('unitSeg').innerHTML = units.map((u) => `<button type="button" data-unit="${esc(u)}" aria-pressed="${u === UNIT}">${esc(u.charAt(0).toUpperCase() + u.slice(1))}</button>`).join('');
+  $('unitSeg').querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => { setUnit(b.dataset.unit === 'week' || b.dataset.unit === 'day' ? b.dataset.unit : 'month'); setScope('current'); load(); }));
+  PERIODS = [...$('perSel').options].map((x) => x.value).filter((x) => x !== 'all');
+  const k = PERIODS.indexOf($('perSel').value);
+  $('perPrev').disabled = k < 0 || k === PERIODS.length - 1; $('perNext').disabled = k <= 0;
+  $('perPrev').setAttribute('aria-label', `Previous ${UNIT}`); $('perNext').setAttribute('aria-label', `Next ${UNIT}`);
+  $('retroTitle').textContent = { week: 'Weekly review', day: 'Daily review', cycle: 'Cycle review' }[UNIT] || 'Monthly review';
   if (p.cycle) { $('cycleStart').value = p.cycle.start; $('cycleDays').value = String(p.cycle.days); }
   $('cycleNow').textContent = p.cycle ? `Now: ${p.cycle.days}-day cycles from ${dateStr(p.cycle.start)}.` : 'Now: calendar months.';
 }
@@ -935,7 +957,7 @@ function renderSummary(a, sessions) {
   const who = agents.length > 1 ? `${agents.length} agents` : (!agents[0] || agents[0] === 'claude' ? 'Claude Code' : agents[0]);
   const r = a.retro;
   $('scope').textContent = r && r.period.from
-    ? `${r.period.unit === 'month' ? r.period.name : `The cycle ${dateStr(r.period.from)} – ${dateStr(r.period.to)}`}${r.period.current ? ' (in progress)' : ''}, from ${who}. Trends compare it with the ${r.period.unit} before.`
+    ? `${r.period.unit === 'cycle' ? `The cycle ${dateStr(r.period.from)} – ${dateStr(r.period.to)}` : r.period.name}${r.period.current ? ' (in progress)' : ''}, from ${who}. Trends compare it with the ${r.period.unit} before.`
     : `${fmt(sessions.length)} sessions from ${who}.`;
   if (!r) return;
   const c = r.card;
@@ -967,7 +989,7 @@ function noTrendReason(a) {
   const p = a.period || {}, w = p.windows || [], min = p.compareMin || 3;
   const i = w.findIndex((x) => x.from === p.selected);
   const cur = w[i], prev = w[i + 1];
-  const label = (x) => (p.unit === 'month' ? x.name : `the cycle from ${dateStr(x.from)}`);
+  const label = (x) => (p.unit === 'cycle' ? `the cycle from ${dateStr(x.from)}` : x.name);
   if (!cur) return `Needs at least ${min} sessions in a ${p.unit || 'month'} and in the one before to compare them.`;
   if (!prev) return `Nothing to compare ${label(cur)} with: there are no sessions from the ${p.unit} before.`;
   return `Comparing needs at least ${min} sessions in each ${p.unit}, so one unusual session cannot decide the result. ${label(cur)} has ${cur.sessions} and ${label(prev)} has ${prev.sessions}.`;
@@ -1472,13 +1494,24 @@ function route() {
 addEventListener('hashchange', route);
 
 /* ---- time period: this month / last month / all time ---- */
-let SCOPE = 'current';
+/* SCOPE: 'current' (follows the calendar), 'all', or the first day of a past period */
+let SCOPE = 'current', PERIODS = [];
+const isDay = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
 try { SCOPE = localStorage.getItem('agent-retro:scope') || 'current'; } catch { /* private window */ }
-if (!['current', 'last', 'all'].includes(SCOPE)) SCOPE = 'current';
+if (!['current', 'all'].includes(SCOPE) && !isDay(SCOPE)) SCOPE = 'current';
 function setScope(sc) {
   SCOPE = sc;
   try { localStorage.setItem('agent-retro:scope', sc); } catch { /* ignore */ }
-  document.querySelectorAll('[data-scope]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.scope === sc)));
+}
+let UNIT_PICK = 'month';
+try { UNIT_PICK = localStorage.getItem('agent-retro:unit') || 'month'; } catch { /* private window */ }
+function setUnit(u) {
+  UNIT_PICK = u;
+  try { localStorage.setItem('agent-retro:unit', u); } catch { /* ignore */ }
+}
+function stepPeriod(d) {
+  const k = PERIODS.indexOf($('perSel').value) + d;
+  if (k >= 0 && k < PERIODS.length) { setScope(PERIODS[k]); load(); }
 }
 
 /* ---- Home: verdict, five areas with a peek, what to do next, is it working ---- */
@@ -1527,7 +1560,7 @@ function renderHome(a) {
   const r = a.retro, v = a.view || { scope: 'all' };
   const all = v.scope === 'all';
   const c = r ? r.card : null;
-  $('homeEyebrow').textContent = all ? `All time · ${dateStr(v.from)} – ${dateStr(v.to)}` : `${v.scope === 'last' ? 'Last' : 'This'} ${UNIT} · ${UNIT === 'month' ? v.name : `${dateStr(v.from)} – ${dateStr(v.to)}`}${v.current ? ' · in progress' : ''}`;
+  $('homeEyebrow').textContent = all ? `All time · ${dateStr(v.from)} – ${dateStr(v.to)}` : `${pname(v, UNIT)}${v.current ? ' · in progress' : ''}`;
   $('verdict').textContent = all ? 'Everything you have done with your agents' : r ? r.verdict : 'No sessions yet';
   const t = (a.trend && a.trend.metrics) || {};
   const better = Object.values(t).filter((m) => m.verdict === 'better').length, worse = Object.values(t).filter((m) => m.verdict === 'worse').length;
@@ -1544,7 +1577,7 @@ function renderHome(a) {
   ]);
   $('homeSub').textContent = '';
   if (!all && a.sessions.count < MIN_SESSIONS) $('homeSub').innerHTML = `· <b>too few sessions to judge</b>${v.scope === 'current' ? ` (<a href="#home" id="seeLast">see last ${esc(UNIT)}</a>)` : ''}`;
-  if ($('seeLast')) $('seeLast').addEventListener('click', (e) => { e.preventDefault(); setScope('last'); load(); });
+  if ($('seeLast')) $('seeLast').addEventListener('click', (e) => { e.preventDefault(); stepPeriod(1); });
   $('shareBtn').hidden = all;
   const areas = areasOf(a);
   if (!PEEK || !areas.some((x) => x.id === PEEK)) PEEK = (areas.find((x) => x.state === 'act') || areas[0]).id;
@@ -1579,7 +1612,7 @@ function renderDigest(a) {
   const none = (what) => `<p class="empty">${what}</p>`;
   const rows = (list, dot) => (list.length ? list.map((it) => `<div class="drow">${vdot(dot)}<b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}</div>`).join('') : none(`Nothing this ${esc(r.period.unit)}.`));
   const f = r.followUp;
-  $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' · in progress' : ''}</p>
+  $('digest').innerHTML = `<p class="eyebrow">${esc(pname(r.period, r.period.unit))}${r.period.current ? ' · in progress' : ''}</p>
     <h2>${esc(r.verdict)}</h2><p class="lede">${esc(r.headline)}</p>
     <h3 class="good">What went well</h3>${rows(r.wentWell, 'better')}
     <h3 class="bad">What didn't</h3>${rows(r.didntGoWell, 'worse')}
@@ -1598,7 +1631,8 @@ function query() {
   const ag = $('agentSel').value;
   if (ag === 'all') q.set('agents', '1'); else if (ag) q.set('agent', ag);
   if ($('project').value) q.set('project', $('project').value);
-  if (SCOPE !== 'all') q.set('scope', SCOPE);
+  if (UNIT_PICK === 'week' || UNIT_PICK === 'day') q.set('unit', UNIT_PICK);
+  if (isDay(SCOPE)) q.set('period', SCOPE); else if (SCOPE !== 'all') q.set('scope', SCOPE);
   if ($('transcripts').checked) q.set('transcripts', '1');
   if ($('all').checked) q.set('all', '1');
   return q.toString();
@@ -1647,7 +1681,9 @@ async function init() {
   } catch { /* load() reports the error */ }
   ['agentSel', 'project', 'transcripts', 'all'].forEach((id) => $(id).addEventListener('change', load));
   setScope(SCOPE);
-  document.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => { setScope(b.dataset.scope); load(); }));
+  $('perSel').addEventListener('change', () => { setScope($('perSel').value); load(); });
+  $('perPrev').addEventListener('click', () => stepPeriod(1));
+  $('perNext').addEventListener('click', () => stepPeriod(-1));
   $('refresh').addEventListener('click', async () => { try { await postJson('/api/reload', {}); } catch { /* load() reports it */ } load(); });
   ['taskFilter', 'sessSort'].forEach((id) => $(id).addEventListener('change', renderExplorer));
   $('cycleForm').addEventListener('submit', async (e) => {

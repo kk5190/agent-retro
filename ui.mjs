@@ -38,7 +38,7 @@ function queryOpts(q) {
     allSources: q.all === '1' || (!has('all') && !!launch.allSources), errors: false, format: 'json',
     allAgents: q.agents === '1', agent: q.agent || null,
     scope: ['current', 'last'].includes(q.scope) ? q.scope : null,
-    periodPick: q.period || null, cycleStart: launch.cycleStart || null, cycleDays: launch.cycleDays || null,
+    periodPick: q.period || null, unit: ['week', 'day'].includes(q.unit) ? q.unit : null, cycleStart: launch.cycleStart || null, cycleDays: launch.cycleDays || null,
   };
 }
 
