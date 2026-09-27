@@ -28,6 +28,7 @@ const cache = new Map();
 /** Options the dashboard was started with (--dir, --tz, --cycle-start, …): the base every query starts from. */
 let launch = {};
 
+const isDay = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || '') && !Number.isNaN(Date.parse(x));
 /** A page query on top of the launch options: the page's filters win where it sets them. */
 function queryOpts(q) {
   const has = (k) => q[k] != null && q[k] !== '';
@@ -38,7 +39,7 @@ function queryOpts(q) {
     allSources: q.all === '1' || (!has('all') && !!launch.allSources), errors: false, format: 'json',
     allAgents: q.agents === '1', agent: q.agent || null,
     scope: ['current', 'last'].includes(q.scope) ? q.scope : null,
-    periodPick: q.period || null, unit: ['week', 'day'].includes(q.unit) ? q.unit : null, cycleStart: launch.cycleStart || null, cycleDays: launch.cycleDays || null,
+    periodPick: q.period || null, ...(isDay(q.from) && isDay(q.to) && q.from <= q.to && { from: q.from, to: q.to }), cycleStart: launch.cycleStart || null, cycleDays: launch.cycleDays || null,
   };
 }
 

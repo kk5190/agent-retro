@@ -574,26 +574,27 @@ export const localDay = (iso) => { const [y, m, d] = String(iso).split('-').map(
 /** Fewer sessions than this in a period is too little to judge it. */
 export const MIN_PERIOD_SESSIONS = 5;
 
-/**
- * Weeks (from Monday) and days are cycles with a name: the same windows, the same trend. Any past
- * Monday works as the start.
- */
+/** Weeks (from Monday) and days are cycles with a name: the same windows, the same trend. */
 export const UNIT_CYCLES = { week: { start: '2024-01-01', days: 7, unit: 'week' }, day: { start: '2024-01-01', days: 1, unit: 'day' } };
-/** The period's unit: month, week, day, or a configured cycle. */
+/** The period's unit: month, week, day, a configured cycle, or 'period' for a custom range. */
 export const unitOf = (cycle) => (!cycle ? 'month' : cycle.unit || 'cycle');
 
 /**
- * The review units your own sessions can support, finest first. Month always; a week or a day only
- * when the median of your last 8 active weeks or days holds MIN_PERIOD_SESSIONS, so a light user is
- * never offered periods that would all read "too few to judge".
+ * Any date range, from a calendar: 'YYYY-MM-DD' to 'YYYY-MM-DD', both days included. Returns the
+ * window, the one it is compared with and the `cycle` that names them. A whole calendar month is a
+ * month (compared with the month before), Monday–Sunday a week, one day a day; anything else is a
+ * period, compared with the same number of days just before it.
  */
-export function periodUnits(sessions, { now = Date.now() } = {}) {
-  const units = ['month'];
-  for (const u of ['week', 'day']) {
-    const counts = periodWindows(sessions, UNIT_CYCLES[u], { now }).filter((w) => !w.current && w.sessions).slice(0, 8).map((w) => w.sessions).sort((a, b) => a - b);
-    if (counts.length >= 3 && counts[Math.floor(counts.length / 2)] >= MIN_PERIOD_SESSIONS) units.unshift(u);
-  }
-  return units;
+export function rangeWindow(sessions, fromIso, toIso, { now = Date.now() } = {}) {
+  const [y, m, d] = fromIso.split('-').map(Number), [y2, m2, d2] = toIso.split('-').map(Number);
+  const from = new Date(y, m - 1, d).getTime(), to = new Date(y2, m2 - 1, d2 + 1).getTime();
+  const days = Math.round((to - from) / DAY);
+  const starts = sessions.filter((s) => s.start).map((s) => s.start);
+  const win = (a, b) => ({ from: a, to: b, current: now >= a && now < b, sessions: starts.filter((t) => t >= a && t < b).length });
+  const month = d === 1 && to === new Date(y, m, 1).getTime();
+  const cycle = month ? null : days === 1 ? UNIT_CYCLES.day : days === 7 && new Date(from).getDay() === 1 ? UNIT_CYCLES.week : { unit: 'period', days };
+  const prevFrom = month ? new Date(y, m - 2, 1).getTime() : new Date(y, m - 1, d - days).getTime();
+  return { window: win(from, to), previous: win(prevFrom, from), cycle };
 }
 
 /**
@@ -634,6 +635,7 @@ export function periodName(w, cycle) {
   if (!cycle) return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   if (cycle.unit === 'week') return `Week of ${day(d)}`;
   if (cycle.unit === 'day') return day(d);
+  if (cycle.unit === 'period') { const e = new Date(w.to - 1); return `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}${d.getFullYear() !== e.getFullYear() ? `, ${d.getFullYear()}` : ''} – ${MONTHS[e.getMonth()].slice(0, 3)} ${e.getDate()}, ${e.getFullYear()}`; }
   return `${localDate(w.from)} → ${localDate(w.to - 1)}`;
 }
 

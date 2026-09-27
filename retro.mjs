@@ -59,7 +59,7 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   };
 
   // Went well
-  const trendNote = !a.trend ? '' : a.trend.mode === 'period' ? `${a.trend.period || 'This period'} against the ${unit} before.` : a.trend.mode === 'split' ? `Before and after ${a.trend.boundary.slice(0, 10)}.` : `Last ${a.trend.days} days against the ${a.trend.days} before.`;
+  const trendNote = !a.trend ? '' : a.trend.mode === 'period' ? `${a.trend.period || 'This period'} against ${a.trend.previous || `the ${unit} before`}.` : a.trend.mode === 'split' ? `Before and after ${a.trend.boundary.slice(0, 10)}.` : `Last ${a.trend.days} days against the ${a.trend.days} before.`;
   const wentWell = [];
   const trend = a.trend ? Object.entries(a.trend.metrics) : [];
   for (const [key, m] of trend) if (m.verdict === 'better') wentWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
@@ -87,8 +87,8 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
 
   // One experiment to measure, and Did it work?: the last saved review's actions, baseline → now
   const exp = actions.find((x) => x.metric);
-  const experiment = exp ? { title: exp.title, metric: exp.metric, span: unit === 'cycle' ? `${cycle.days} days` : unit,
-    check: `agent-retro --retro at the end of next ${unit}` } : null;
+  const experiment = exp ? { title: exp.title, metric: exp.metric, span: unit === 'cycle' || unit === 'period' ? `${cycle.days} days` : unit,
+    check: `agent-retro --retro at the end of the next ${unit === 'cycle' || unit === 'period' ? `${cycle.days} days` : unit}` } : null;
 
   // Change: one list, so nothing is said twice. The Do next items lead, numbered, with the metric to
   // watch (one of them is the experiment); then other habits to start, then things to stop.

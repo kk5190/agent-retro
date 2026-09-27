@@ -613,20 +613,25 @@ test('periods: a custom cycle gives aligned windows', async () => {
   assert.equal(new Date(w[1].from).getDay(), 3, 'cycles start on the chosen weekday');
 });
 
-test('periods: weeks and days are offered only when your own sessions fill them', async () => {
-  const { buildSessions, periodUnits, periodWindows, periodName, UNIT_CYCLES, localDay } = await import('./sessions.mjs');
-  const now = localDay('2026-09-27') + 12 * 3600e3; // a Sunday
-  // perDay sessions on every `gap`-th of the last `days` days
-  const make = (perDay, days, gap = 1) => buildSessions(Array.from({ length: perDay * days }, (_, i) => ({
-    agent: 'x', sessionId: `s${i}`, ts: now - (1 + gap * Math.floor(i / perDay)) * 864e5 + (i % perDay) * 60e3, role: 'user', text: 'fix the failing checkout test',
-  })));
-  assert.deepEqual(periodUnits(make(1, 30, 2), { now }), ['month'], 'about 3 a week: months only');
-  assert.deepEqual(periodUnits(make(1, 60), { now }), ['week', 'month'], '7 a week: weeks too');
-  assert.deepEqual(periodUnits(make(6, 30), { now }), ['day', 'week', 'month'], '6 a day: days too');
-  const wk = periodWindows(make(1, 20), UNIT_CYCLES.week, { now });
-  assert.equal(new Date(wk[0].from).getDay(), 1, 'weeks start on Monday');
-  assert.equal(periodName(wk[1], UNIT_CYCLES.week), 'Week of September 14, 2026');
-  assert.equal(periodName(periodWindows(make(1, 3), UNIT_CYCLES.day, { now })[1], UNIT_CYCLES.day), 'September 26, 2026');
+test('periods: any calendar range, compared with the stretch just before it', async () => {
+  const { buildSessions, rangeWindow, periodName, localDate: day } = await import('./sessions.mjs');
+  const now = new Date(2026, 8, 27, 12).getTime();
+  const at = (iso) => new Date(iso + 'T10:00:00').getTime();
+  const sessions = buildSessions(['2026-08-05', '2026-08-25', '2026-09-02', '2026-09-08', '2026-09-10'].map((d, i) => ({ agent: 'x', sessionId: `s${i}`, ts: at(d), role: 'user', text: 'fix the failing checkout test' })));
+  const r = (f, t) => rangeWindow(sessions, f, t, { now });
+  const span = (w) => [day(w.from), day(w.to - 1)];
+  const month = r('2026-09-01', '2026-09-30');
+  assert.equal(month.cycle, null, 'a whole month is a month');
+  assert.deepEqual(span(month.previous), ['2026-08-01', '2026-08-31'], 'compared with the calendar month before');
+  assert.deepEqual([month.window.sessions, month.previous.sessions, month.window.current], [3, 2, true]);
+  const week = r('2026-09-07', '2026-09-13');
+  assert.equal(week.cycle.unit, 'week'); assert.equal(periodName(week.window, week.cycle), 'Week of September 7, 2026');
+  assert.deepEqual(span(week.previous), ['2026-08-31', '2026-09-06']);
+  assert.equal(r('2026-09-08', '2026-09-08').cycle.unit, 'day');
+  const any = r('2026-08-25', '2026-09-10');
+  assert.deepEqual([any.cycle.unit, any.cycle.days], ['period', 17]);
+  assert.equal(periodName(any.window, any.cycle), 'Aug 25 – Sep 10, 2026');
+  assert.deepEqual(span(any.previous), ['2026-08-08', '2026-08-24'], 'the same number of days just before');
 });
 
 test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back to months; --period picks one', () => {
@@ -650,6 +655,9 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   assert.equal(march.scope, 'period'); assert.equal(march.from, '2026-03-01'); assert.equal(march.to, '2026-03-31');
   assert.equal(view('--period', '2026-01-15').from, '2026-01-01', 'any month with sessions, not only the last two');
   assert.equal(view('--period', '2026-03-15', '--scope', 'all').scope, 'all');
+  const custom = view('--from', '2026-02-20', '--to', '2026-03-05');
+  assert.deepEqual([custom.scope, custom.unit, custom.from, custom.to], ['period', 'period', '2026-02-20', '2026-03-05'], '--from/--to limit everything to any range');
+  assert.equal(run('--from', '2026-03-05', '--to', '2026-02-20').status, 2, 'from after to is refused');
   // spend per day: each session's cost on the day it started, adding up to the total
   const a = JSON.parse(run('--json', '--all-agents').stdout);
   assert.equal(+a.cost.daily.reduce((x, d) => x + d.n, 0).toFixed(2), a.cost.usd);
