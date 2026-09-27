@@ -46,6 +46,7 @@
   .filters > label, .xbar > label { font-size: 12px; color: var(--ink-3); }
   select, input[type=search], button { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 9px; }
   button { cursor: pointer; }
+  button.primary { background: var(--signal); border-color: var(--signal); color: var(--surface); font-weight: 600; }
   details.adv { position: relative; font-size: 13px; }
   details.adv summary { cursor: pointer; color: var(--ink-2); list-style: none; padding: 6px 9px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
   details.adv summary::-webkit-details-marker { display: none; }
@@ -79,20 +80,6 @@
   .intro { padding: 44px 0 8px; }
   .intro h1 { font: 600 clamp(28px, 4vw, 40px)/1.1 var(--display); letter-spacing: -0.025em; margin: 0 0 10px; max-width: 22ch; }
   .intro p { margin: 0; color: var(--ink-2); max-width: 70ch; }
-  .findings { list-style: none; margin: 28px 0 0; padding: 0; border-top: 1px solid var(--rule); }
-  .finding { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 12px; padding: 16px 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
-  .finding .mark { width: 10px; height: 10px; border-radius: 50%; background: var(--signal); transform: translateY(-1px); }
-  .finding.attention .mark { background: var(--alert); box-shadow: 0 0 0 4px var(--alert-soft); }
-  .finding h3 { margin: 0; font: 500 18px/1.35 var(--display); letter-spacing: -0.01em; }
-  .finding h3 b { font-family: var(--mono); font-weight: 600; font-size: 0.95em; color: var(--signal); }
-  .finding.attention h3 b { color: var(--alert); }
-  .finding p { grid-column: 2; margin: 0; color: var(--ink-2); font-size: 14px; }
-  .finding a { grid-row: 1; grid-column: 3; font-size: 13px; white-space: nowrap; text-decoration: none; }
-  .finding a:hover { text-decoration: underline; }
-  @media (max-width: 640px) { .finding { grid-template-columns: 22px minmax(0, 1fr); } .finding a { grid-row: auto; grid-column: 2; } }
-  .legend-inline { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--ink-3); }
-  .legend-inline i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--signal); }
-  .legend-inline i.a { background: var(--alert); }
 
   /* Sections ---------------------------------------------------------------- */
   section.part { padding-top: 56px; }
@@ -281,6 +268,39 @@
   .vq q { display: block; color: var(--ink-2); margin-bottom: 6px; }
   .miss { display: inline-block; font-size: 11.5px; padding: 1px 8px; margin: 0 4px 4px 0; border-radius: 999px; background: var(--alert-soft); color: var(--alert); }
 
+  /* Retro board ------------------------------------------------------------------ */
+  .card { margin: 24px 0 18px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
+  .card .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .card .nums div b { display: block; font: 600 26px/1.15 var(--display); letter-spacing: -0.02em; }
+  .card .nums div span { font-size: 12.5px; color: var(--ink-3); }
+  .card p { margin: 14px 0 0; font: 500 16px/1.45 var(--display); color: var(--ink); max-width: 80ch; }
+  .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .board { grid-template-columns: 1fr; } }
+  .col { background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 12px; padding: 14px 14px 6px; min-width: 0; }
+  .col h3 { margin: 0 0 10px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); display: flex; justify-content: space-between; }
+  .col h3 span { color: var(--ink-3); font-weight: 500; }
+  .col.good { --c: #2e8a63; } .col.bad { --c: var(--alert); } .col.start { --c: var(--signal); } .col.stop { --c: var(--ink-3); }
+  @media (prefers-color-scheme: dark) { .col.good { --c: #6fd3a4; } }
+  .note { padding: 10px 0; border-top: 1px solid var(--rule); font-size: 13.5px; }
+  .note:first-of-type { border-top: 0; padding-top: 2px; }
+  .note b { display: block; font-weight: 600; color: var(--ink); line-height: 1.35; }
+  .note span { display: block; color: var(--ink-3); font-size: 12.5px; margin-top: 3px; }
+  .note a { font-size: 12px; text-decoration: none; }
+  .col .empty { padding-bottom: 10px; }
+  .actions { list-style: none; margin: 0; padding: 0; counter-reset: a; }
+  .actions li { counter-increment: a; padding: 12px 0; border-top: 1px solid var(--rule); display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; }
+  .actions li:first-child { border-top: 0; }
+  .actions li::before { content: counter(a); width: 22px; height: 22px; border-radius: 50%; background: var(--signal-soft); color: var(--signal); font: 600 12px/22px var(--body); text-align: center; }
+  .actions b { font-weight: 600; }
+  .actions small { grid-column: 2; color: var(--ink-3); font-size: 12.5px; }
+  .actions button { font-size: 12px; padding: 3px 10px; }
+  .kz-item { display: flex; gap: 8px; font-size: 13.5px; padding: 6px 0; }
+  .kz-item i { font-style: normal; width: 18px; flex: none; }
+  .kz-exp { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--signal-soft); font-size: 13.5px; }
+  .kz-exp code { font: 12px var(--mono); }
+  .kz-save { margin-top: 12px; }
+
   details.more { margin-top: 56px; border-top: 1px solid var(--rule); padding-top: 18px; }
   details.more > summary { cursor: pointer; font: 600 18px var(--display); }
   details.more > summary span { font: 400 14px var(--body); color: var(--ink-3); margin-left: 8px; }
@@ -316,7 +336,7 @@
 <div class="wrap">
   <nav class="rail" aria-label="Sections">
     <ol>
-      <li><a href="#summary">Summary</a></li>
+      <li><a href="#summary">Retro</a></li>
       <li><a href="#changes">What to change</a></li>
       <li><a href="#tasks">What you work on</a></li>
       <li><a href="#tokens">Where tokens go</a></li>
@@ -332,10 +352,14 @@
 
   <main>
     <section id="summary" class="intro">
-      <h1>How you work with coding agents</h1>
+      <h1>Your agent retro</h1>
       <p id="scope">Reading your local agent logs…</p>
-      <ol class="findings" id="findings"></ol>
-      <div class="legend-inline"><span><i class="a"></i>Worth acting on</span><span><i></i>Context</span></div>
+      <div class="card" id="sprintCard"></div>
+      <div class="board" id="board"></div>
+      <div class="grid g2 gap retro-foot">
+        <div class="panel"><h3>Action items</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol></div>
+        <div class="panel"><h3>Kaizen</h3><p class="hint">One small experiment, measured. Save the retro and the next one checks how its action items moved.</p><div id="kaizen"></div></div>
+      </div>
     </section>
 
     <section id="changes" class="part">
@@ -667,12 +691,32 @@ function dailyTable(id, series, valueOf, fmtV) {
 function renderSummary(a, sessions) {
   const agents = Object.keys(a.agents || {});
   const who = agents.length > 1 ? `${agents.length} agents` : (!agents[0] || agents[0] === 'claude' ? 'Claude Code' : agents[0]);
-  $('scope').textContent = `${fmt(sessions.length)} sessions and ${fmt(a.volume.prompts)} of your prompts over ${a.scope.activeDays} active days (${dateStr(a.scope.first)} – ${dateStr(a.scope.last)}), from ${who}.`;
-  const F = a.findings || [];
-  const bold = (t) => esc(t).replace(/(\$?\d[\d.,]*[kMB]?%?)/, '<b>$1</b>');
-  $('findings').innerHTML = F.length
-    ? F.map((f) => `<li class="finding ${f.level}"><span class="mark" role="img" aria-label="${f.level === 'attention' ? 'Worth acting on' : 'Context'}"></span><h3>${bold(f.title)}</h3><p>${esc(f.detail)}</p><a href="#${esc(f.section)}">See the numbers →</a></li>`).join('')
-    : '<li class="finding"><span class="mark"></span><h3>Nothing stands out in this selection.</h3><p>Widen the period or include all agents.</p></li>';
+  const r = a.retro;
+  $('scope').textContent = r && r.period.from ? `Sprint of ${dateStr(r.period.from)} – ${dateStr(r.period.to)} (the last ${r.period.days} days of activity), from ${who}. Patterns below cover all ${fmt(sessions.length)} sessions in view.` : `${fmt(sessions.length)} sessions from ${who}.`;
+  if (!r) return;
+  const c = r.card;
+  $('sprintCard').innerHTML = `<div class="nums">
+      <div><b>${fmt(c.sessions)}</b><span>sessions this sprint</span></div>
+      <div><b>${c.spend ? money(c.spend) : '—'}</b><span>recorded spend</span></div>
+      <div><b>${c.agentHours} h</b><span>of agent work</span></div>
+      <div><b>${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)} of sessions` : 'main task'}</span></div>
+    </div><p>${esc(r.headline)}</p>`;
+  const COLS = [['wentWell', 'Went well', 'good'], ['didntGoWell', "Didn't go well", 'bad'], ['start', 'Start', 'start'], ['stop', 'Stop', 'stop']];
+  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this sprint.</p>'}</div>`).join('');
+  $('actions').innerHTML = r.actions.length ? r.actions.map((x, i) => `<li><b>${esc(x.title)}</b><button type="button" data-afix="${i}">Copy fix</button><small>${x.metric ? `Watch: ${esc(x.metric.label)}, now <strong>${esc(x.metric.display)}</strong>` : `Fix: ${esc(FIX_LABEL[x.fix.kind] || 'Fix')} ${esc(x.fix.target)}`}</small></li>`).join('') : '<p class="empty">No action items: nothing crossed a threshold.</p>';
+  $('actions').querySelectorAll('[data-afix]').forEach((b) => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(r.actions[Number(b.dataset.afix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
+    setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
+  }));
+  const k = r.kaizen;
+  const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
+  $('kaizen').innerHTML = (k.review ? `<div style="font-size:12.5px;color:var(--ink-3)">Since the retro saved ${esc(dateStr(k.review.savedAt.slice(0, 10)))}</div>` + k.review.items.map((it) => `<div class="kz-item"><i>${mark[it.verdict] || '·'}</i><div><b>${esc(it.title)}</b>${it.metric ? `<br><span style="color:var(--ink-3);font-size:12.5px">${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('') : '')
+    + (k.experiment ? `<div class="kz-exp"><b>Experiment for the next ${k.experiment.days} days:</b> ${esc(k.experiment.title)}.<br>Measure ${esc(k.experiment.metric.label)}, now <b>${esc(k.experiment.metric.display)}</b>. Check with <code>${esc(k.experiment.check)}</code>.</div>` : '<p class="empty">No measurable experiment this sprint.</p>')
+    + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this retro</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`;
+  $('saveRetro').addEventListener('click', async () => {
+    try { await postJson('/api/retro/save?' + query(), {}); $('saveStatus').textContent = 'Saved. The next retro will review these action items.'; }
+    catch (e) { $('saveStatus').textContent = 'Could not save: ' + e.message; }
+  });
 }
 
 /* ---- trends ---- */

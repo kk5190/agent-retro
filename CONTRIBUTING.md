@@ -11,6 +11,7 @@ Thanks for helping. The project has no dependencies and no build step. You need 
 | `sessions.mjs` | `buildSessions` (events → SessionRecords), the `TASKS` table, `labelTask`, `summarizeTasks` |
 | `agent-retro.mjs` | CLI, `loadTelemetry`, `analyze` (rollup), text/markdown reports |
 | `prompts.mjs` | Prompt-practice detection (`analyzePrompt`) and the per-practice outcome summary |
+| `retro.mjs` | The retro: arranges trend, findings, prompting and recommendations into columns, action items and Kaizen |
 | `recommend.mjs` | Recommendation rules (one function each) and the Claude Code config reader |
 | `telemetry.mjs` | Schema version, redaction, text levels, export bundle |
 | `mcp.mjs` | stdio MCP server over the telemetry views |

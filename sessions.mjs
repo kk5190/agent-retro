@@ -523,6 +523,15 @@ function sumOf(m, keep = () => true) { let n = 0; for (const [k, v] of Object.en
 function avg(S, f) { return S.length ? +(S.reduce((x, s) => x + f(s), 0) / S.length).toFixed(4) : null; }
 function ratio(S, num, den) { const d = S.reduce((x, s) => x + den(s), 0); return d ? +(S.reduce((x, s) => x + num(s), 0) / d).toFixed(4) : null; }
 
+/** One metric, before vs after: relative change and a verdict (a change under 10% is flat). */
+export function compareMetric(key, before, after) {
+  const m = TREND_METRICS[key];
+  if (!m || before == null || after == null) return null;
+  const change = before ? (after - before) / before : null;
+  return { label: m.label, share: !!m.share, ...(m.usd && { usd: true }), before, after, change: change == null ? null : +change.toFixed(3),
+    verdict: change == null || Math.abs(change) < 0.1 ? 'flat' : (change < 0) === m.lowerIsBetter ? 'better' : 'worse' };
+}
+
 /**
  * Compare two periods. With `split` (ms), before = sessions starting earlier, after = the rest;
  * otherwise the last `days` before the newest session versus the `days` before that.
@@ -537,12 +546,9 @@ export function comparePeriods(sessions, { split = null, days = 14, minSessions 
   const after = dated.filter((s) => s.start >= boundary);
   if (before.length < minSessions || after.length < minSessions) return null;
   const metrics = {};
-  for (const [key, m] of Object.entries(TREND_METRICS)) {
-    const b = m.of(before), a = m.of(after);
-    if (b == null || a == null) continue;
-    const change = b ? (a - b) / b : null;
-    metrics[key] = { label: m.label, share: !!m.share, ...(m.usd && { usd: true }), before: b, after: a, change: change == null ? null : +change.toFixed(3),
-      verdict: change == null || Math.abs(change) < 0.1 ? 'flat' : (change < 0) === m.lowerIsBetter ? 'better' : 'worse' };
+  for (const key of Object.keys(TREND_METRICS)) {
+    const c = compareMetric(key, TREND_METRICS[key].of(before), TREND_METRICS[key].of(after));
+    if (c) metrics[key] = c;
   }
   return { boundary: new Date(boundary).toISOString(), mode: split ? 'split' : 'rolling', days: split ? null : days, sessions: { before: before.length, after: after.length }, metrics };
 }

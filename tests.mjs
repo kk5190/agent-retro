@@ -477,7 +477,7 @@ test('mcp: initialize, tools/list, tools/call round-trip over stdio', async () =
     assert.equal(init.result.serverInfo.name, 'agent-retro');
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
     const list = await rpc('tools/list', {});
-    assert.deepEqual(list.result.tools.map((t) => t.name), ['get_overview', 'list_sessions', 'get_recommendations', 'get_extensions', 'get_session', 'get_task_profile']);
+    assert.deepEqual(list.result.tools.map((t) => t.name), ['get_overview', 'list_sessions', 'get_recommendations', 'get_retro', 'get_extensions', 'get_session', 'get_task_profile']);
     const ex = await rpc('tools/call', { name: 'get_extensions', arguments: { kind: 'hooks' } });
     assert.equal(ex.result.structuredContent.hooks[0].name, 'SessionStart');
     const recs = await rpc('tools/call', { name: 'get_recommendations', arguments: {} });
@@ -514,4 +514,55 @@ test('cli: --demo runs on synthetic data and never reads the real home', () => {
   assert.ok(a.recommendations.some((x) => x.id === 'playbook-code-review'));
   assert.ok(a.trend && a.extensions.hooks.length);
   assert.match(r.stderr, /demo mode: 36 synthetic sessions/);
+});
+
+test('retro: columns, caps, action metrics and the Kaizen review of a saved retro', async () => {
+  const { buildRetro, retroSnapshot } = await import('./retro.mjs');
+  const { buildSessions } = await import('./sessions.mjs');
+  const T = Date.parse('2026-05-20T10:00:00Z');
+  const sessions = buildSessions([0, 1, 2].flatMap((i) => [
+    { agent: 'x', sessionId: `r${i}`, ts: T + i * 864e5, role: 'user', text: 'implement the export page' },
+    { agent: 'x', sessionId: `r${i}`, ts: T + i * 864e5 + 1000, role: 'user', text: 'continue' },
+    { agent: 'x', sessionId: `r${i}`, ts: T + i * 864e5 + 2000, role: 'assistant' },
+  ]));
+  const recs = [
+    { id: 'screenshots', level: 'high', title: 'Read pages as text', action: 'Read text. Then more.', fix: { kind: 'claude-md', target: 'x', content: 'y' } },
+    { id: 'check-ins', level: 'medium', title: 'Cut check-ins', action: 'Keep going.', fix: { kind: 'claude-md', target: 'x', content: 'y' } },
+    { id: 'unused-mcp', level: 'medium', title: 'Remove servers', action: 'Remove them.' },
+  ];
+  const analysis = {
+    recommendations: recs, tasks: {}, context: { cacheHitRate: 90 }, risk: { sensitiveAccess: 0, destructiveCommands: 0 },
+    findings: [{ level: 'attention', title: 'Context is heavy.', detail: 'd', section: 'tokens' }, { level: 'info', title: 'fyi', detail: 'd', section: 'x' }],
+    trend: { metrics: { toolErrorRate: { label: 'Failed tool calls', share: true, before: 0.1, after: 0.05, verdict: 'better' }, ackRate: { label: '“Continue” prompts', share: true, before: 0.1, after: 0.5, verdict: 'worse' } } },
+    prompting: { practices: [] },
+  };
+  const r = buildRetro(analysis, sessions, null);
+  assert.equal(r.card.sessions, 3);
+  assert.equal(r.card.topTask.id, 'feature');
+  assert.deepEqual(r.wentWell.map((x) => x.text), ['Failed tool calls: 10% → 5%', '90% of input served from cache', 'No secret access or destructive commands']);
+  assert.deepEqual(r.didntGoWell.map((x) => x.text), ['Context is heavy.', '“Continue” prompts: 10% → 50%']);
+  assert.deepEqual(r.start.map((x) => x.recId), ['screenshots']);
+  assert.deepEqual(r.stop.map((x) => x.recId), ['check-ins', 'unused-mcp']);
+  assert.equal(r.start[0].detail, 'Read text.');
+  assert.deepEqual(r.actions.map((x) => x.id), ['screenshots', 'check-ins'], 'only recommendations with a fix');
+  assert.equal(r.actions[1].metric.display, '50%', 'ackRate of the sprint: 3 of 6 prompts');
+  assert.equal(r.kaizen.review, null);
+  assert.equal(r.kaizen.experiment.metric.key, 'ackRate', 'first action item with a measurable metric');
+  const snap = retroSnapshot(r);
+  assert.deepEqual(snap.actions[1], { id: 'check-ins', title: 'Cut check-ins', metric: 'ackRate', baseline: 0.5 });
+  const later = buildRetro(analysis, sessions, { ...snap, actions: [{ ...snap.actions[1], baseline: 0.8 }] });
+  assert.deepEqual(later.kaizen.review.items[0], { title: 'Cut check-ins', metric: '“Continue” prompts', baseline: '80%', now: '50%', verdict: 'better', stillOpen: true });
+  assert.equal(buildRetro({ recommendations: [], tasks: {}, prompting: { practices: [] } }, [], null).headline, 'No sessions in this period yet.');
+});
+
+test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-save-'));
+  const run = (...args) => spawnSync(process.execPath, [CLI, '--demo', ...args], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8' });
+  const md = run('--retro', '--md');
+  assert.equal(md.status, 0, md.stderr);
+  for (const h of ['## Retro', '### Went well', "### Didn't go well", '### Start', '### Stop', '### Action items', '### Kaizen']) assert.ok(md.stdout.includes(h), h);
+  assert.match(md.stdout, /Since the retro saved/, 'the demo ships a saved retro');
+  const saved = run('--save-retro');
+  assert.equal(saved.status, 0, saved.stderr);
+  assert.match(saved.stderr, /retro saved to .*agent-retro-demo-.*\.agent-retro\/retros\//, 'writes inside the demo home only');
 });

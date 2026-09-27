@@ -215,5 +215,12 @@ export function writeDemo(home) {
   put('.claude/settings.json', J({ enabledPlugins: { 'review-kit@community': true, 'plan-kit@community': true, 'legacy-tools@internal': true } }));
   put('.claude.json', J({ mcpServers: { linear: { command: 'linear-mcp' } } }));
   fs.mkdirSync(path.join(home, '.claude/skills/deploy-notes'), { recursive: true });
+  // a retro "saved" two weeks ago, so the demo's Kaizen block has something to review
+  const saved = new Date(now - 14 * 864e5).toISOString();
+  put(`.agent-retro/retros/${saved.slice(0, 10)}.json`, J({ version: 1, savedAt: saved, period: null, actions: [
+    { id: 'screenshots', title: 'Read pages as text instead of screenshots', metric: 'browserOutputShare', baseline: 0.85 },
+    { id: 'check-ins', title: 'Cut the “continue?” check-ins', metric: 'ackRate', baseline: 0.12 },
+    { id: 'unused-mcp', title: 'Remove 1 MCP server you never call', metric: 'listingTokensPerSession', baseline: 160 },
+  ] }));
   return plan.length;
 }

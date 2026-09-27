@@ -11,6 +11,8 @@ reload) only from its own page.
   - `~/.claude/history.jsonl`
 - **What it writes:**
   - `~/.agent-retro/labels.json`, only when you correct a task label
+  - `~/.agent-retro/retros/<date>.json`, only when you save a retro (action ids and metric
+    baselines only)
   - export files, only when you pass `--export`
 - **Before exported text leaves the process,** these are masked: API keys and tokens, emails and
   home-directory paths. `--text none` removes prompt text entirely and replaces project names,

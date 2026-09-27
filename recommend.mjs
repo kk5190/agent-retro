@@ -39,6 +39,9 @@ export function readClaudeConfig() {
 }
 
 const LEVEL = { high: 0, medium: 1, low: 2 };
+
+/** The trend metric (sessions.mjs TREND_METRICS) each recommendation is meant to move. */
+export const REC_METRIC = { 'unused-plugins': 'listingTokensPerSession', 'unused-skills': 'listingTokensPerSession', 'unused-mcp': 'listingTokensPerSession', screenshots: 'browserOutputShare', 'context-pressure': 'highContextShare', 'check-ins': 'ackRate', secrets: 'sensitivePerSession', 'flaky-tools': 'toolErrorRate' };
 const sum = (arr, f) => arr.reduce((x, v) => x + f(v), 0);
 const pct = (x) => Math.round(100 * x);
 const k = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n));

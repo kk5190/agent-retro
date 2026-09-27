@@ -1,0 +1,120 @@
+/**
+ * retro.mjs — the analysis as a sprint retrospective.
+ *
+ * buildRetro(analysis, sessions, previous) arranges what the rest of the pipeline already found
+ * into the retro format: a sprint card, then Went well / Didn't go well / Start / Stop, Action
+ * items, and a Kaizen block — one measured experiment, plus a review of the last saved retro's
+ * action items (baseline → now). No new analysis happens here; every item points at the section
+ * holding its numbers.
+ */
+import { TREND_METRICS, compareMetric } from './sessions.mjs';
+import { REC_METRIC, PLAYBOOKS } from './recommend.mjs';
+
+export const SPRINT_DAYS = 14;
+const MAX = 4;
+
+/** Recommendations that add a habit go under Start; ones that remove something under Stop. */
+const STOP = new Set(['unused-plugins', 'unused-skills', 'unused-mcp', 'check-ins', 'heavy-hooks', 'heavy-skills']);
+
+const pct = (x) => Math.round(x * 100) + '%';
+const compact = (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+(+v).toFixed(2)));
+export function formatMetric(key, v) {
+  const m = TREND_METRICS[key];
+  if (v == null || !m) return '—';
+  return m.usd ? '$' + v.toFixed(2) : m.share ? pct(v) : compact(v);
+}
+const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
+
+/** The sprint: sessions that started in the last SPRINT_DAYS days before the newest one. */
+function sprintSessions(sessions) {
+  const dated = sessions.filter((s) => s.start);
+  if (!dated.length) return { list: sessions, from: null, to: null };
+  const to = Math.max(...dated.map((s) => s.start));
+  const from = to - SPRINT_DAYS * 864e5;
+  return { list: dated.filter((s) => s.start >= from), from, to };
+}
+
+export function buildRetro(analysis, sessions, previous = null) {
+  const a = analysis;
+  const { list, from, to } = sprintSessions(sessions);
+  const iso = (t) => (t ? new Date(t).toISOString().slice(0, 10) : null);
+  const recs = a.recommendations || [];
+
+  // Sprint card
+  const byTask = {};
+  for (const s of list) byTask[s.task.primary] = (byTask[s.task.primary] || 0) + 1;
+  const [topTask, topN] = Object.entries(byTask).sort((x, y) => y[1] - x[1])[0] || ['other', 0];
+  const taskLabel = ((a.tasks || {})[topTask] || {}).label || topTask;
+  const spend = list.reduce((x, s) => x + (s.costUsd || 0), 0);
+  const agentHours = list.reduce((x, s) => x + ((s.time && s.time.agentMinutes) || 0), 0) / 60;
+  const card = {
+    sessions: list.length, spend: +spend.toFixed(2), agentHours: +agentHours.toFixed(1),
+    prompts: list.reduce((x, s) => x + s.turns.human, 0), topTask: list.length ? { id: topTask, label: taskLabel, share: +(topN / list.length).toFixed(2) } : null,
+  };
+
+  // Went well
+  const wentWell = [];
+  const trend = a.trend ? Object.entries(a.trend.metrics) : [];
+  for (const [key, m] of trend) if (m.verdict === 'better') wentWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: 'Last 14 days against the 14 before.', section: 'changes' });
+  for (const p of ((a.prompting || {}).practices || [])) if (p.outcome && p.outcome.helps && p.share >= 0.3) {
+    wentWell.push({ text: `You ${p.label.charAt(0).toLowerCase() + p.label.slice(1)} in ${pct(p.share)} of openings`, detail: `Those sessions needed ${p.outcome.with.medianFollowUps} follow-ups; without it, ${p.outcome.without.medianFollowUps}.`, section: 'prompting' });
+  }
+  for (const [task, t] of Object.entries(a.tasks || {})) if (PLAYBOOKS[task] && t.sessions >= 3 && !recs.some((r) => r.task === task)) {
+    wentWell.push({ text: `${t.label} follows the playbook`, detail: `${t.sessions} sessions, and none skip its key practices in most sessions.`, section: 'tasks' });
+  }
+  if ((a.context || {}).cacheHitRate >= 80) wentWell.push({ text: `${a.context.cacheHitRate}% of input served from cache`, detail: 'Cached input costs a fraction of fresh input.', section: 'tokens' });
+  if (a.risk && !a.risk.sensitiveAccess && !a.risk.destructiveCommands) wentWell.push({ text: 'No secret access or destructive commands', detail: 'Nothing touched .env files, keys or ~/.ssh; no force-pushes or risky deletes.', section: 'risk' });
+
+  // Didn't go well
+  const didntGoWell = [];
+  for (const f of (a.findings || [])) if (f.level === 'attention') didntGoWell.push({ text: f.title, detail: f.detail, section: f.section });
+  for (const [key, m] of trend) if (m.verdict === 'worse' && !didntGoWell.some((x) => x.text.startsWith(m.label))) didntGoWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: 'Last 14 days against the 14 before.', section: 'changes' });
+
+  // Start / Stop
+  const toItem = (r) => ({ text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
+  const start = recs.filter((r) => !STOP.has(r.id)).map(toItem);
+  const stop = recs.filter((r) => STOP.has(r.id)).map(toItem);
+
+  // Action items: the top three with a fix, each with the metric that will show whether it worked
+  const metricNow = (key) => (TREND_METRICS[key] ? TREND_METRICS[key].of(list) : null);
+  const actions = recs.filter((r) => r.fix).slice(0, 3).map((r) => {
+    const key = REC_METRIC[r.id];
+    const now = key ? metricNow(key) : null;
+    return { id: r.id, title: r.title, level: r.level, fix: r.fix, ...(key && now != null && { metric: { key, label: TREND_METRICS[key].label, now, display: formatMetric(key, now) } }) };
+  });
+
+  // Kaizen: one experiment, and the review of the last saved retro
+  const exp = actions.find((x) => x.metric);
+  const today = iso(Date.now());
+  const kaizen = {
+    experiment: exp ? { title: exp.title, metric: exp.metric, check: `agent-retro --split ${today}`, days: SPRINT_DAYS } : null,
+    review: previous ? {
+      savedAt: previous.savedAt,
+      items: (previous.actions || []).map((p) => {
+        const now = p.metric ? metricNow(p.metric) : null;
+        const c = p.metric ? compareMetric(p.metric, p.baseline, now) : null;
+        return { title: p.title, metric: p.metric ? TREND_METRICS[p.metric].label : null, baseline: p.metric ? formatMetric(p.metric, p.baseline) : null, now: p.metric ? formatMetric(p.metric, now) : null, verdict: c ? c.verdict : 'unmeasured', stillOpen: recs.some((r) => r.id === p.id) };
+      }),
+    } : null,
+  };
+
+  const win = wentWell[0], drag = didntGoWell[0];
+  const headline = !list.length ? 'No sessions in this period yet.'
+    : `${list.length} session${list.length === 1 ? '' : 's'}${card.spend ? `, $${card.spend.toFixed(0)}` : ''} and ${card.agentHours.toFixed(0)} h of agent work, mostly ${/^[A-Z][a-z]/.test(taskLabel) ? taskLabel.charAt(0).toLowerCase() + taskLabel.slice(1) : taskLabel}.`
+      + (win ? ` Biggest win: ${win.text.charAt(0).toLowerCase() + win.text.slice(1)}.` : '') + (drag ? ` Biggest drag: ${drag.text.charAt(0).toLowerCase() + drag.text.slice(1).replace(/\.$/, '')}.` : '');
+
+  return {
+    period: { from: iso(from), to: iso(to), days: from ? SPRINT_DAYS : null },
+    card, headline,
+    wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), start: start.slice(0, MAX), stop: stop.slice(0, MAX),
+    actions, kaizen,
+  };
+}
+
+/** What a saved retro keeps: its action items and their metric baselines — no prompt text. */
+export function retroSnapshot(retro) {
+  return {
+    version: 1, savedAt: new Date().toISOString(), period: retro.period,
+    actions: retro.actions.map((x) => ({ id: x.id, title: x.title, metric: x.metric ? x.metric.key : null, baseline: x.metric ? x.metric.now : null })),
+  };
+}

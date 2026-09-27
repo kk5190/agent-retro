@@ -5,7 +5,8 @@
  * Started via `agent-retro --ui` (or `node ui.mjs`). Serves a self-contained page at
  * http://127.0.0.1:<port>/ and JSON at /api/data (rollup), /api/sessions (session
  * records, `?task=` to filter) and /api/meta. POST /api/reload drops cached results; POST
- * /api/label { sessionId, task } corrects a session's task label (same-origin JSON only).
+ * /api/label { sessionId, task } corrects a session's task label; POST /api/retro/save saves the
+ * current retro for the next one to review (both same-origin JSON only).
  *
  * No external assets, no network access beyond localhost.
  */
@@ -14,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { loadTelemetry, loadHistory, writeLabel, CONTEXT_LABELS } from './agent-retro.mjs';
+import { loadTelemetry, loadHistory, writeLabel, saveRetro, CONTEXT_LABELS } from './agent-retro.mjs';
 import { TASKS } from './sessions.mjs';
 import { PARSABLE } from './agents.mjs';
 import { sessionView } from './telemetry.mjs';
@@ -95,15 +96,21 @@ export function startUi(o = {}) {
           return;
         }
         if (url.pathname === '/api/meta') return sendJson(res, 200, await meta());
+        const q = Object.fromEntries(url.searchParams.entries());
         if (req.method === 'POST' && !sameOrigin(req, host, port)) return sendJson(res, 403, { error: 'writes are only accepted from the dashboard itself' });
         if (url.pathname === '/api/reload' && req.method === 'POST') { cache.clear(); return sendJson(res, 200, { ok: true }); }
+        if (url.pathname === '/api/retro/save' && req.method === 'POST') {
+          const { analysis } = await build(q);
+          const file = saveRetro(analysis.retro);
+          cache.clear();
+          return sendJson(res, 200, { ok: true, file });
+        }
         if (url.pathname === '/api/label' && req.method === 'POST') {
           const { sessionId, task } = await readBody(req);
           try { writeLabel(sessionId, task || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
           cache.clear();
           return sendJson(res, 200, { ok: true });
         }
-        const q = Object.fromEntries(url.searchParams.entries());
         if (url.pathname === '/api/data') return sendJson(res, 200, (await build(q)).analysis);
         if (url.pathname === '/api/sessions') {
           const { sessions } = await build(q);

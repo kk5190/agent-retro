@@ -47,6 +47,11 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: { ...FILTERS } },
   },
   {
+    name: 'get_retro',
+    description: 'A sprint retrospective of the last 14 days of agent use: a sprint card (sessions, spend, agent hours, main task), Went well / Didn\'t go well / Start / Stop items, the top three action items with fixes and the metric to watch, and Kaizen: one measured experiment plus a review of the last saved retro\'s action items (baseline → now). Good for "summarize my last sprint".',
+    inputSchema: { type: 'object', properties: { ...FILTERS } },
+  },
+  {
     name: 'get_extensions',
     description: 'Per-extension usage from the session logs: plugins (skills used/listed, MCP servers, enabled key), skills (uses, sessions used vs listed, tokens each load, listing cost), MCP servers (source, calls, failure rate and cause, output tokens), hooks (runs, p90 duration, failures, context injected per session) and slash commands. Each has a verdict: used, rarely used, unused.',
     inputSchema: { type: 'object', properties: { ...FILTERS, kind: { type: 'string', enum: ['plugins', 'skills', 'mcpServers', 'hooks', 'commands'], description: 'Only this kind' }, verdict: { type: 'string', enum: ['used', 'rarely used', 'unused'] } } },
@@ -112,6 +117,10 @@ export function createServer(o = {}) {
     async get_recommendations(args) {
       const { analysis } = await telemetry(args);
       return { recommendations: rollupView(analysis, level).recommendations };
+    },
+    async get_retro(args) {
+      const { analysis } = await telemetry(args);
+      return rollupView(analysis, level).retro;
     },
     async get_extensions(args) {
       const { analysis } = await telemetry(args);

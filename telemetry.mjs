@@ -114,6 +114,14 @@ export function rollupView(a, level = 'excerpts') {
   r.tasks = Object.fromEntries(Object.entries(a.tasks || {}).map(([k, t]) => [k, { ...t, topShell: t.topShell.map(([c, n]) => [commandName(c, level), n]) }]));
   if (a.extensions) r.extensions = { ...a.extensions, hooks: a.extensions.hooks.map((h) => ({ ...h, commands: none ? [] : h.commands.map(redact) })) };
   if (a.prompting) r.prompting = { ...a.prompting, vagueExamples: none ? [] : a.prompting.vagueExamples.map((v) => ({ ...v, text: redact(v.text) })) };
+  if (a.retro) {
+    const personal = new Set((a.recommendations || []).filter((x) => x.personal).map((x) => x.id));
+    r.retro = { ...a.retro, actions: a.retro.actions.map((x) => {
+      if (!x.fix) return x;
+      if (personal.has(x.id) && none) { const { fix, ...rest } = x; return rest; }
+      return { ...x, fix: { ...x.fix, content: redact(x.fix.content) } };
+    }) };
+  }
   r.workflows = (a.workflows || []).map((w) => ({ ...w, steps: w.steps.map((c) => commandName(c, level)) }));
   r.projects = mapKeys(a.projects, (p) => projectName(p, level));
   r.sessions = { ...a.sessions, longest: a.sessions.longest.map((x) => ({ ...x, proj: projectName(x.proj, level) })) };

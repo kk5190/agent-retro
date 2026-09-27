@@ -13,6 +13,9 @@
   - estimated context sources and compactions
   - working and waiting time
   - risk signals
+- **Sprint retro:** a sprint card; Went well / Didn't go well / Start / Stop; action items with
+  fixes and the metric to watch; and Kaizen, with a review of the last saved retro. Available in
+  the dashboard, as `--retro [--md]`, as `--save-retro`, and through the MCP tool `get_retro`.
 - **Recommendations:** evidence-backed rules, each with a fix you can paste:
   - unused plugins, skills and MCP servers
   - screenshots versus page text

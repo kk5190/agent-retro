@@ -21,6 +21,7 @@
     "telemetry.mjs",
     "prompts.mjs",
     "recommend.mjs",
+    "retro.mjs",
     "fixtures.mjs",
     "mcp.mjs",
     "ui.mjs",

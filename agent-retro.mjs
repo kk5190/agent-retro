@@ -47,6 +47,8 @@
  *   --label <id>=<task>     Correct one session's task label (<id>= clears it)
  *   --label-accuracy        How often the rules agree with your corrected labels
  *   --demo                  Use a built-in month of synthetic sessions instead of your logs
+ *   --retro                 Print only the sprint retro (with --md: paste-ready markdown)
+ *   --save-retro            Save this retro's action items so the next one reviews them
  *   --no-history            Skip ~/.claude/history.jsonl
  *   --all-sources           Include SDK/system-injected prompts too
  *   --errors                Print parse warnings to stderr
@@ -57,8 +59,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadEvents, eventsToData } from './agents.mjs';
-import { recommend, readClaudeConfig } from './recommend.mjs';
+import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
+import { buildRetro, retroSnapshot } from './retro.mjs';
 import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, TASK_IDS, toolBucket } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
@@ -102,6 +105,8 @@ function parseArgs(argv) {
       case '--label': o.label = next(); break;
       case '--label-accuracy': o.labelAccuracy = true; break;
       case '--demo': o.demo = true; break;
+      case '--retro': o.retro = true; break;
+      case '--save-retro': o.saveRetro = true; break;
       case '--no-history': o.history = false; break;
       case '--all-sources': o.allSources = true; break;
       case '--errors': o.errors = true; break;
@@ -125,6 +130,26 @@ export function readLabels() {
   try { return JSON.parse(fs.readFileSync(labelsFile(), 'utf8')); } catch { return {}; }
 }
 /** Set (or with task null, clear) the label for one session. */
+// ---------------------------------------------------------------------------
+// Saved retros — action items and metric baselines, so the next retro can review them
+// ---------------------------------------------------------------------------
+const retrosDir = () => path.join(home(), '.agent-retro', 'retros');
+/** The most recently saved retro, or null. */
+export function latestRetro() {
+  let files = [];
+  try { files = fs.readdirSync(retrosDir()).filter((f) => /^\d{4}-\d{2}-\d{2}.*\.json$/.test(f)).sort(); } catch { return null; }
+  for (const f of files.reverse()) { try { return JSON.parse(fs.readFileSync(path.join(retrosDir(), f), 'utf8')); } catch { /* skip unreadable */ } }
+  return null;
+}
+/** Save the retro's action items and baselines. Returns the file written. */
+export function saveRetro(retro) {
+  const snap = retroSnapshot(retro);
+  fs.mkdirSync(retrosDir(), { recursive: true });
+  const file = path.join(retrosDir(), `${snap.savedAt.slice(0, 10)}.json`);
+  fs.writeFileSync(file, JSON.stringify(snap, null, 2) + '\n');
+  return file;
+}
+
 export function writeLabel(sessionId, task) {
   if (typeof sessionId !== 'string' || !sessionId || sessionId.length > 200) throw new Error('invalid session id');
   if (task != null && !TASK_IDS.includes(task)) throw new Error(`unknown task: ${task}`);
@@ -135,8 +160,6 @@ export function writeLabel(sessionId, task) {
   return labels;
 }
 
-/** Which recommendation each trend metric tracks. */
-const REC_METRIC = { 'unused-plugins': 'listingTokensPerSession', 'unused-skills': 'listingTokensPerSession', 'unused-mcp': 'listingTokensPerSession', screenshots: 'browserOutputShare', 'context-pressure': 'highContextShare', 'check-ins': 'ackRate', secrets: 'sensitivePerSession', 'flaky-tools': 'toolErrorRate' };
 
 /**
  * Load every selected agent's events once and derive both views from the same stream:
@@ -158,6 +181,7 @@ export async function loadTelemetry(o) {
     const m = analysis.trend && analysis.trend.metrics[REC_METRIC[r.id]];
     return m ? { ...r, trend: { metric: REC_METRIC[r.id], ...m } } : r;
   });
+  analysis.retro = buildRetro(analysis, sessions, latestRetro());
   return { data, sessions, analysis };
 }
 
@@ -466,6 +490,53 @@ function bar(v, max, width = 30) { return '█'.repeat(max ? Math.round((v / max
 const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v * 100) + '%' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+v.toFixed(2)));
 const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `last ${t.days} days vs the ${t.days} before`);
 
+const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['start', 'Start'], ['stop', 'Stop']];
+
+function retroText(r) {
+  if (!r) return [];
+  const L = ['', `=== RETRO · ${r.period.from ? `${r.period.from} → ${r.period.to} (last ${r.period.days} days)` : 'all sessions'} ===`, `  ${r.headline}`];
+  for (const [key, title] of RETRO_COLUMNS) {
+    L.push('', `  ${title.toUpperCase()}`);
+    if (!r[key].length) L.push('    —');
+    for (const it of r[key]) L.push(`    • ${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
+  }
+  L.push('', '  ACTION ITEMS');
+  if (!r.actions.length) L.push('    —');
+  r.actions.forEach((x, i) => L.push(`    ${i + 1}. [ ] ${x.title}${x.metric ? `  (watch: ${x.metric.label}, now ${x.metric.display})` : ''}`));
+  L.push('', '  KAIZEN');
+  const k = r.kaizen;
+  if (k.review) {
+    L.push(`    Since the retro saved ${k.review.savedAt.slice(0, 10)}:`);
+    for (const it of k.review.items) L.push(`      ${it.verdict === 'better' ? '✓' : it.verdict === 'worse' ? '✗' : '·'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}${it.stillOpen ? ' · still recommended' : ''}`);
+  }
+  if (k.experiment) L.push(`    Experiment for the next ${k.experiment.days} days: ${k.experiment.title}.`, `    Measure: ${k.experiment.metric.label}, now ${k.experiment.metric.display}. Check with: ${k.experiment.check}`);
+  if (!k.review) L.push('    Save this retro (--save-retro) so the next one reviews how these action items went.');
+  return L;
+}
+
+function retroMd(r) {
+  if (!r) return [];
+  const L = [`## Retro: ${r.period.from ? `${r.period.from} → ${r.period.to}` : 'all sessions'}`, '', r.headline, ''];
+  for (const [key, title] of RETRO_COLUMNS) {
+    L.push(`### ${title}`, '');
+    if (!r[key].length) L.push('- —');
+    for (const it of r[key]) L.push(`- **${it.text}**${it.detail ? ` ${it.detail}` : ''}`);
+    L.push('');
+  }
+  L.push('### Action items', '');
+  if (!r.actions.length) L.push('- —');
+  for (const x of r.actions) L.push(`- [ ] **${x.title}**${x.metric ? ` (watch ${x.metric.label}, now ${x.metric.display})` : ''}`);
+  L.push('', '### Kaizen', '');
+  const k = r.kaizen;
+  if (k.review) {
+    L.push(`Since the retro saved ${k.review.savedAt.slice(0, 10)}:`, '');
+    for (const it of k.review.items) L.push(`- ${it.verdict === 'better' ? '✅' : it.verdict === 'worse' ? '❌' : '➖'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}`);
+    L.push('');
+  }
+  if (k.experiment) L.push(`**Experiment for the next ${k.experiment.days} days:** ${k.experiment.title}. Measure ${k.experiment.metric.label} (now ${k.experiment.metric.display}); check with \`${k.experiment.check}\`.`);
+  return L;
+}
+
 function renderText(a, hist, o) {
   const L = [];
   const row = (label, val) => L.push(`  ${label.padEnd(26)} ${val}`);
@@ -480,8 +551,7 @@ function renderText(a, hist, o) {
   L.push(`AGENT-RETRO REPORT · ${multi ? 'all coding agents' : 'Claude Code'}`);
   L.push(`Generated ${a.generatedAt.slice(0, 19).replace('T', ' ')}  |  ${a.scope.files} transcripts  |  ${a.scope.first} → ${a.scope.last}`);
 
-  sec('FINDINGS');
-  for (const f of a.findings || []) L.push(`  ${f.level === 'attention' ? '!' : '·'} ${f.title}\n      ${f.detail}`);
+  L.push(...retroText(a.retro));
 
   sec('RECOMMENDATIONS');
   const recs = a.recommendations || [];
@@ -669,6 +739,7 @@ function renderMd(a, hist, o) {
     `| Tool calls | ${a.volume.toolCalls} |`,
     `| Active days | ${a.scope.activeDays} |`,
     `| Prompts / active day | ${a.volume.promptsPerActiveDay} |`, '');
+  L.push(...retroMd(a.retro), '');
   L.push('## Recommendations', '');
   for (const r of a.recommendations || []) {
     L.push(`### ${r.title} _(${r.level})_`, '', `**Why:** ${r.evidence}`, '', `**Do:** ${r.action}`, '');
@@ -769,6 +840,13 @@ async function main() {
   if (o.errors && data.parseErrors) console.error(`[agent-retro] ${data.parseErrors} unparseable lines skipped`);
   if (!data.files.length) { console.error('No transcripts found. Check --dir, or try --all-agents / --scan.'); process.exit(1); }
   const hist = loadHistory(o);
+
+  if (o.saveRetro) {
+    const file = saveRetro(analysis.retro);
+    console.error(`[agent-retro] retro saved to ${file}; the next retro will review its action items.`);
+    if (!o.retro) return;
+  }
+  if (o.retro) { console.log((o.format === 'md' ? retroMd(analysis.retro) : retroText(analysis.retro)).join('\n').replace(/^\n/, '')); return; }
 
   if (o.labelAccuracy) {
     const manual = sessions.filter((s) => s.task.source === 'manual');

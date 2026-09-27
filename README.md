@@ -30,7 +30,8 @@ From a clone: `node agent-retro.mjs …` takes the same flags.
 `--demo` never reads your logs. It writes synthetic sessions to a temporary directory, which is
 also where the screenshots below come from.
 
-![Summary: findings drawn from your sessions](docs/images/summary.jpg)
+![Your agent retro: sprint card and Went well / Didn't go well / Start / Stop](docs/images/retro.jpg)
+![Action items with fixes, and Kaizen reviewing the last saved retro](docs/images/retro-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
 ![Extensions: plugins, skills, MCP servers and hooks, loaded versus used](docs/images/extensions.jpg)
 
@@ -79,6 +80,31 @@ at a median of 14 turns, mostly by hand with `git diff`".
 
 The rules are the `TASKS` table in `sessions.mjs`, one row per task. See
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## The retro
+
+The dashboard opens with a sprint retrospective of your agent use over the last 14 days of
+activity, in the format many teams already use:
+
+- **Sprint card:** sessions, spend, agent hours, main task, and a one-line verdict ("biggest win,
+  biggest drag").
+- **Went well:** metrics that improved on the previous sprint, prompt practices that work for
+  you, clean risk signals.
+- **Didn't go well:** the patterns worth acting on, and metrics that got worse.
+- **Start / Stop:** the recommendations, split into habits to add and things to remove.
+- **Action items:** the top three changes, each with a fix to paste and the metric to watch.
+- **Kaizen:** one measured experiment. **Save this retro** (or `--save-retro`), and the next
+  retro reviews each saved action item: baseline → now, better or worse.
+
+To post it to a team channel as markdown:
+
+```bash
+npx agent-retro --retro --md
+```
+
+Saved retros live in `~/.agent-retro/retros/`. They hold action ids and metric baselines only,
+never prompt text. `get_retro` on the MCP server returns the same retro, for "summarize my last
+sprint" in Claude Code.
 
 ## Prompt practices
 
@@ -201,6 +227,7 @@ claude mcp add agent-retro -- node /path/to/agent-retro.mjs --mcp --all-agents
 | `get_session` | One record by id |
 | `get_task_profile` | One task's stats plus the ids of its costliest and longest sessions |
 | `get_recommendations` | The recommendations above, with evidence and fixes, for the agent to present to you |
+| `get_retro` | The sprint retro: card, Went well / Didn't go well / Start / Stop, action items and Kaizen |
 | `get_extensions` | Plugins, skills, MCP servers, hooks and slash commands, optionally filtered by kind or verdict |
 
 It speaks JSON-RPC 2.0 over stdio with no SDK dependency. It serves exactly the same views as the
@@ -235,9 +262,8 @@ npx agent-retro --ui --open         # http://127.0.0.1:4173
 The dashboard (`ui/index.html`) is self-contained, loads no external assets, listens on localhost
 only, and follows your system's light or dark setting. It reads top to bottom as a report:
 
-1. **Summary.** Plain-language findings, such as "Tool results make up 54% of what fills your
-   context window". Each one is marked *worth acting on* or *context*, and links to the numbers
-   behind it. The same findings open the terminal report.
+1. **Retro.** A sprint card, then Went well / Didn't go well / Start / Stop, action items, and
+   Kaizen with a saved-retro review. The same retro opens the terminal report.
 2. **What to change.** The recommendations, each with a copyable fix.
 3. **What you work on.** Tasks, with per-session medians. Select a task to list its sessions;
    "How to do this better" jumps to that task's playbook.
@@ -321,6 +347,7 @@ Vendor formats change without notice. There are four layers of defense:
 --label <id>=<task>            correct a session's task (--label <id>= clears it)
 --label-accuracy               how often the rules agree with your corrections
 --demo                         synthetic data instead of your logs
+--retro [--md]  --save-retro   print only the retro (paste-ready with --md); save it for the next review
 --scan  --list-agents  --doctor  --errors
 ```
 

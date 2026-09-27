@@ -140,7 +140,8 @@
             "workflows",
             "trend",
             "extensions",
-            "prompting"
+            "prompting",
+            "retro"
           ],
           "properties": {
             "scope": {
@@ -638,6 +639,137 @@
                     ]
                   },
                   "description": "Redacted; empty at text level none"
+                }
+              }
+            },
+            "retro": {
+              "type": "object",
+              "required": [
+                "period",
+                "card",
+                "headline",
+                "wentWell",
+                "didntGoWell",
+                "start",
+                "stop",
+                "actions",
+                "kaizen"
+              ],
+              "description": "The analysis as a sprint retrospective (last 14 days of activity).",
+              "properties": {
+                "wentWell": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "section"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "section": {
+                        "type": "string"
+                      },
+                      "recId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "didntGoWell": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "section"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "section": {
+                        "type": "string"
+                      },
+                      "recId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "start": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "section"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "section": {
+                        "type": "string"
+                      },
+                      "recId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "stop": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "section"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "section": {
+                        "type": "string"
+                      },
+                      "recId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "level"
+                    ]
+                  }
+                },
+                "kaizen": {
+                  "type": "object",
+                  "required": [
+                    "experiment",
+                    "review"
+                  ]
                 }
               }
             }
