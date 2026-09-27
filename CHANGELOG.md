@@ -48,6 +48,11 @@
     and sessions, one period calendar (quick picks, and any week, month or range, shaded by sessions per day; `--from`/`--to` on the command line), and a summary page
   - pages in a side rail, and spend per day on Home and the Cost page (each session's cost on the
     day it started)
+  - a Context page (where each session starts and grows, fixed against work, item by item with what to
+    try, the heaviest sessions, the biggest item you can change), an Output page (what the agent writes,
+    by model, and each skill, MCP server and plugin against sessions without it) and a Cost page broken
+    down by task, model, project, token type and costliest sessions; `get_context` and
+    `get_agent_output` over MCP
   - a quiet visual language: warm grey with one blue accent, charts that grey out everything but
     the value that matters, half-circle gauges per area, a 24-hour clock of when you prompt, and
     light and dark themes

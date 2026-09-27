@@ -477,7 +477,7 @@ test('mcp: initialize, tools/list, tools/call round-trip over stdio', async () =
     assert.equal(init.result.serverInfo.name, 'agent-retro');
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
     const list = await rpc('tools/list', {});
-    assert.deepEqual(list.result.tools.map((t) => t.name), ['get_overview', 'list_sessions', 'get_recommendations', 'get_retro', 'get_extensions', 'get_session', 'get_task_profile']);
+    assert.deepEqual(list.result.tools.map((t) => t.name), ['get_overview', 'list_sessions', 'get_recommendations', 'get_retro', 'get_extensions', 'get_context', 'get_agent_output', 'get_session', 'get_task_profile']);
     const ex = await rpc('tools/call', { name: 'get_extensions', arguments: { kind: 'hooks' } });
     assert.equal(ex.result.structuredContent.hooks[0].name, 'SessionStart');
     const recs = await rpc('tools/call', { name: 'get_recommendations', arguments: {} });
@@ -487,6 +487,11 @@ test('mcp: initialize, tools/list, tools/call round-trip over stdio', async () =
     assert.equal(ls.result.structuredContent.sessions[0].id, 'rev-1');
     const prof = await rpc('tools/call', { name: 'get_task_profile', arguments: { task: 'debugging' } });
     assert.equal(prof.result.structuredContent.fixLoops, 1);
+    const cx = (await rpc('tools/call', { name: 'get_context', arguments: {} })).result.structuredContent;
+    assert.ok(cx.context.sessions > 0 && cx.context.items.length, 'context items for an agent to read');
+    assert.ok(cx.context.bottleneck && cx.context.bottleneck.advice, 'the biggest changeable item, with what to try');
+    const out = (await rpc('tools/call', { name: 'get_agent_output', arguments: {} })).result.structuredContent;
+    assert.ok(out.output.byModel.length && out.cost.byTask.length);
     const ov = await rpc('tools/call', { name: 'get_overview', arguments: {} });
     assert.ok(ov.result.structuredContent.tasks['feature']);
     const miss = await rpc('tools/call', { name: 'get_session', arguments: { id: 'nope' } });
@@ -662,6 +667,46 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   const a = JSON.parse(run('--json', '--all-agents').stdout);
   assert.equal(+a.cost.daily.reduce((x, d) => x + d.n, 0).toFixed(2), a.cost.usd);
   assert.ok(a.cost.daily.every((d, i, l) => !i || l[i - 1].date < d.date), 'sorted by day');
+});
+
+test('context, output and cost: item by item, setup against results, where the spend goes', async () => {
+  const { buildSessions, summarizeContext, summarizeOutput, summarizeCost } = await import('./sessions.mjs');
+  const T = 1e12;
+  const session = (id, { model = 'claude-opus-5-5', skill = null, usd = 1, pushback = false, start = 30000, readChars = 4000 } = {}) => {
+    let n = 0; const ev = (role, extra) => ({ agent: 'claude', sessionId: id, ts: T + n++ * 1000, role, ...extra });
+    return [
+      ev('ctx', { cat: 'memory', chars: 800 }), ev('ctx', { cat: 'hooks', chars: 2000 }),
+      ev('user', { text: 'fix the failing checkout test in cart.ts' }),
+      ev('usage', { model, input: 100, output: 900, cacheRead: start, cacheWrite: 0 }), ev('assistant', { model }),
+      ...(skill ? [ev('skill', { text: skill, via: 'tool' })] : []),
+      ev('tool', { toolName: 'Read', detail: '/app/cart.ts' }), ev('ctx', { cat: 'toolOutput', tool: 'Read', chars: readChars }),
+      ...(pushback ? [ev('user', { text: 'no, that is wrong' })] : []),
+      ev('usage', { model, input: 100, output: 300, cacheRead: start + 20000, cacheWrite: 0 }), ev('assistant', { model }),
+      ev('cost', { usd }),
+    ];
+  };
+  const sessions = buildSessions([
+    ...[1, 2, 3].flatMap((i) => session(`a${i}`, { skill: 'kit:review', usd: 3, pushback: true, readChars: 40000 })),
+    ...[4, 5, 6].flatMap((i) => session(`b${i}`, { model: 'claude-sonnet-5', usd: 1 })),
+  ]);
+  assert.equal(sessions[0].context.startTokens, 30100, 'the real window at the first reply');
+  assert.equal(sessions[0].context.startLogged, 700, 'memory and hook output logged before it');
+  const C = summarizeContext(sessions, { skills: [{ name: 'kit:review', plugin: 'kit', tokensPerLoad: 500, uses: 3, sessionsUsed: 3 }], mcpServers: [], plugins: [], hooks: [{ name: 'SessionStart', injectedTokens: 3000, sessions: 6 }] });
+  assert.equal(C.perSession.startMedian, 30100);
+  assert.equal(C.sources[0].key, 'unlogged', 'the unlogged system prompt is its own, fixed source');
+  assert.equal(C.sources[0].group, 'fixed');
+  assert.equal(C.bottleneck.kind, 'tool', 'the biggest item you can change, not the fixed system prompt');
+  assert.equal(C.bottleneck.name, 'Read'); assert.match(C.bottleneck.advice, /subagent/);
+  assert.ok(C.items.some((x) => x.kind === 'skillLoad' && x.perLoad === 500));
+  const O = summarizeOutput(sessions);
+  assert.deepEqual(O.byModel.map((m) => [m.model, m.sessions]), [['claude-opus-5-5', 3], ['claude-sonnet-5', 3]]);
+  const f = O.factors.find((x) => x.kind === 'skill' && x.name === 'kit:review');
+  assert.ok(f, 'a skill used in 3 sessions and absent from 3 is compared');
+  assert.deepEqual([f.with.correctionRate, f.without.correctionRate, f.with.costPerSession, f.without.costPerSession], [0.5, 0, 3, 1]);
+  assert.ok(O.factors.some((x) => x.kind === 'plugin' && x.name === 'kit'), 'its plugin too');
+  const $ = summarizeCost(sessions);
+  assert.equal($.usd, 12); assert.deepEqual($.byModel.map((x) => [x.key, x.usd]), [['claude-opus-5-5', 9], ['claude-sonnet-5', 3]]);
+  assert.equal($.priciest[0].usd, 3); assert.equal($.topFifthShare, 0.25, 'the costliest fifth (1 of 6 sessions)');
 });
 
 test('editing: blind edits, rewrites, rework and what you interrupted, per thread', () => {

@@ -58,6 +58,16 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: { ...FILTERS, kind: { type: 'string', enum: ['plugins', 'skills', 'mcpServers', 'hooks', 'commands'], description: 'Only this kind' }, verdict: { type: 'string', enum: ['used', 'rarely used', 'unused'] } } },
   },
   {
+    name: 'get_context',
+    description: 'What fills the main conversation\'s context window, per session: where it starts (the real window at the first reply) and how big it grows, the fixed part loaded before the first prompt (system prompt and built-in tools, which the logs never show, tool and MCP listings, CLAUDE.md, start-up hooks) against what the work adds, every source, every item (a tool\'s results, an MCP server\'s tool listing or output, a plugin\'s skill listing, a skill\'s loads, a hook) with tokens per session and what to try, the heaviest sessions, and the biggest item you can change. Estimates at ~4 characters a token; use it to find the context bottleneck.',
+    inputSchema: { type: 'object', properties: { ...FILTERS } },
+  },
+  {
+    name: 'get_agent_output',
+    description: 'What the agent writes (replies, reasoning, tool calls and edits) and how the setup lines up with results: per model, and per skill, MCP server and plugin (sessions with it vs without), the median output and cost per session, prompts per session, correction rate, failed tool calls and fix loops, each with its main task. Correlation, not causation. Also the cost breakdown by task, model and project, the token mix, and the costliest sessions.',
+    inputSchema: { type: 'object', properties: { ...FILTERS } },
+  },
+  {
     name: 'get_session',
     description: 'One session record by id.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
@@ -130,6 +140,16 @@ export function createServer(o = {}) {
       const E = rollupView(analysis, level).extensions;
       const kinds = args.kind ? [args.kind] : ['plugins', 'skills', 'mcpServers', 'hooks', 'commands'];
       return Object.fromEntries(kinds.map((kind) => [kind, args.verdict ? E[kind].filter((x) => x.verdict === args.verdict) : E[kind]]));
+    },
+    async get_context(args) {
+      const { analysis } = await telemetry(args);
+      const r = rollupView(analysis, level);
+      return { context: r.contextAnalysis, sources: r.contextBreakdown, window: r.context };
+    },
+    async get_agent_output(args) {
+      const { analysis } = await telemetry(args);
+      const r = rollupView(analysis, level);
+      return { output: r.agentOutput, cost: r.costBreakdown };
     },
     async get_session(args) {
       const { sessions } = await telemetry({});

@@ -35,6 +35,8 @@ also where the screenshots below come from.
 ![What to change: the numbered Do next items with the metric to watch, a fix to paste, and the experiment](docs/images/review-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
 ![Extensions: plugins, skills, MCP servers and hooks, loaded versus used](docs/images/extensions.jpg)
+![Context: where a session starts and grows, the biggest item you can change, and every item that fills the window](docs/images/context.jpg)
+![Output: what the agent writes, by model, and your setup against how sessions went](docs/images/output.jpg)
 
 ## What you get
 
@@ -264,6 +266,8 @@ claude mcp add agent-retro -- node /path/to/agent-retro.mjs --mcp --all-agents
 | `get_recommendations` | The recommendations above, with evidence and fixes, for the agent to present to you |
 | `get_retro` | The review of one period: card, Went well / Didn't go well, Change (Do next items first, one marked as the experiment) and Did it work? |
 | `get_extensions` | Plugins, skills, MCP servers, hooks and slash commands, optionally filtered by kind or verdict |
+| `get_context` | What fills the context window per session: start and peak, fixed against work, every source and item with tokens per session and what to try, the heaviest sessions, and the biggest item you can change |
+| `get_agent_output` | What the agent writes, per model and per skill, MCP server and plugin against sessions without it; plus the cost breakdown by task, model and project, the token mix and the costliest sessions |
 
 It speaks JSON-RPC 2.0 over stdio with no SDK dependency. It serves exactly the same views as the
 export.
@@ -308,7 +312,19 @@ tabs on a phone); the header has one period calendar (any week, month or range, 
 - **Work.** Tasks with per-session medians (select one to list its sessions, or open its
   playbook), how sessions go, and what the agent does: tools, why they fail, how it edits, when
   you stop it, shell commands and repeated sequences.
-- **Cost.** Spend, cache and context size; what fills the context (estimated); tokens per day.
+- **Cost.** Where the money goes: spend per day, by task, model and project, what kind of tokens it
+  paid for (cache reads, writes, output, fresh input), and the costliest sessions with what drove them.
+- **Context.** What fills the context window in a typical session: where it starts (the real window at
+  the first reply) and how big it grows, the part loaded before you type (the system prompt and
+  built-in tools, which the logs never show, tool and MCP listings, CLAUDE.md, start-up hooks) against
+  what the work adds, then item by item: each tool's results, each MCP server's listing and output,
+  each plugin's skill listing, each skill's loads, each hook, with tokens per session and what to try.
+  The biggest item you can change is called out. Estimated at about 4 characters a token; run
+  `/context` in Claude Code for one live session.
+- **Output.** What the agent writes (replies, reasoning, tool calls and edits), and your setup against
+  how sessions went: per model, and per skill, MCP server and plugin (sessions with it against
+  sessions without), the cost, prompts, corrections and failed tool calls, each with its main task.
+  It is correlation, so compare like with like.
 - **Setup.** Plugins, skills, MCP servers, hooks, subagents and slash commands, loaded versus used;
   and risk: secret access, destructive commands, error bursts.
 - **Habits.** When you work (activity calendar, weekday × hour punch card) and how you prompt:

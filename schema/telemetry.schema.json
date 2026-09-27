@@ -1138,6 +1138,14 @@
             "compactPreTokens": {
               "type": "number"
             },
+            "startTokens": {
+              "type": ["number", "null"],
+              "description": "The real context window at the first reply: what the session started with (null when the agent logs no per-turn usage)"
+            },
+            "startLogged": {
+              "type": "number",
+              "description": "Estimated tokens logged before the first reply; startTokens minus this is the system prompt and built-in tools"
+            },
             "highContextTurns": {
               "type": "number",
               "description": "Main-thread turns with more than 150k input tokens"

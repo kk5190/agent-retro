@@ -174,14 +174,14 @@ function newSession(e) {
     subagents: { runs: 0, toolCalls: 0, types: {}, byType: {} },
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     costUsd: 0, peakContext: 0, models: {},
-    context: { estimated: false, sources: {}, toolOutputByTool: {}, compactions: 0, compactPreTokens: 0, highContextTurns: 0, apiErrors: 0 },
+    context: { estimated: false, sources: {}, toolOutputByTool: {}, startTokens: null, startLogged: 0, compactions: 0, compactPreTokens: 0, highContextTurns: 0, apiErrors: 0 },
     risk: { sensitiveAccess: 0, destructiveCommands: 0, maxErrorsPerTurn: 0 },
     signals: { testRuns: 0, fixLoops: 0, toolErrorRate: 0, correctionRate: 0, ackRate: 0 },
     _prompts: [], _subPrompts: [], _shellCmds: [], _toolNames: [], _edited: new Set(), _read: new Set(),
     _usageCost: 0, _claudeCost: null, _cum: null, _editsSinceTest: 0, _seenTest: false,
     _ctxMax: {}, _turnErrors: 0, _subRuns: new Map(), _loaded: { skill: {}, mcp: {} },
     _skillUse: {}, _hooks: {}, _toolErrClass: {}, _toolSeq: 0, _firstEdit: null, _firstRun: null,
-    _known: {}, _editsByFile: {}, _lastTool: null,
+    _known: {}, _editsByFile: {}, _lastTool: null, _preChars: 0,
     _shellHeads: [], _turnStart: null, _lastAgent: null, _agentMs: 0, _waitMs: 0, _awayMs: 0, _responses: [],
   };
 }
@@ -267,7 +267,10 @@ function addUsage(s, e) {
   const ctx = (e.input || 0) + (e.cacheRead || 0) + (e.cacheWrite || 0);
   s.peakContext = Math.max(s.peakContext, ctx);
   if (e.sidechain) { const t = sub(s, e); t.tokens += ctx + (e.output || 0); t.outputTokens += e.output || 0; }
-  else if (ctx > HIGH_CONTEXT) s.context.highContextTurns++;
+  else {
+    if (s.context.startTokens == null && ctx) s.context.startTokens = ctx; // the window at the first reply: what every session starts with
+    if (ctx > HIGH_CONTEXT) s.context.highContextTurns++;
+  }
   if (e.cost != null) s._usageCost += e.cost;
 }
 
@@ -328,6 +331,7 @@ export function buildSessions(events, o = {}) {
       case 'ctx': {
         if (e.sidechain) break; // subagents run in their own context window
         const c = s.context; c.estimated = true;
+        if (c.startTokens == null) s._preChars += e.chars; // logged before the first reply
         if (e.max) s._ctxMax[e.cat] = Math.max(s._ctxMax[e.cat] || 0, e.chars);
         else inc(c.sources, e.cat, e.chars);
         if (e.cat === 'toolOutput') inc(c.toolOutputByTool, e.tool, e.chars);
@@ -386,6 +390,7 @@ function finalize(s) {
   for (const [k, v] of Object.entries(s._ctxMax)) c.sources[k] = (c.sources[k] || 0) + v;
   const toTokens = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round(v / 4)]).sort((a, b) => b[1] - a[1]));
   c.sources = toTokens(c.sources); c.toolOutputByTool = toTokens(c.toolOutputByTool);
+  c.startLogged = Math.round(s._preChars / 4);
   const r = s._responses.sort((a, b) => a - b);
   s.time = { agentMinutes: Math.round(s._agentMs / 60000), waitMinutes: Math.round(s._waitMs / 60000), awayMinutes: Math.round(s._awayMs / 60000), medianResponseSec: r.length ? Math.round(r[r.length >> 1] / 1000) : null };
   // A Skill tool call and the load it triggers are one use; loads by basename resolve to the listed "plugin:skill".
@@ -400,7 +405,7 @@ function finalize(s) {
   s.skills = Object.fromEntries(Object.entries(uses).map(([k, u]) => [k, Math.max(u.tool, u.load)]));
   s.task = labelTask(s);
   delete s._turnStart; delete s._lastAgent; delete s._agentMs; delete s._waitMs; delete s._awayMs; delete s._responses;
-  delete s._ctxMax; delete s._turnErrors; delete s._subRuns; delete s._known; delete s._editsByFile; delete s._lastTool; // _loaded stays (internal) for the inventory
+  delete s._ctxMax; delete s._turnErrors; delete s._subRuns; delete s._known; delete s._editsByFile; delete s._lastTool; delete s._preChars; // _loaded stays (internal) for the inventory
   delete s._cum; delete s._editsSinceTest; delete s._seenTest; delete s._usageCost; delete s._claudeCost;
 }
 
@@ -759,6 +764,193 @@ export function summarizeExtensions(sessions, inventory, config = {}) {
     sessionsMeasured: inventory.sessionsMeasured,
     plugins: pluginList, skills: skillList, mcpServers: mcpList, hooks: hookList,
     commands: Object.values(commands).sort((a, b) => b.uses - a.uses),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Context analysis — what fills the window each session, item by item, and the bottleneck
+// ---------------------------------------------------------------------------
+/** Loaded before your first prompt, every session; the rest grows with the work. */
+export const FIXED_CONTEXT = new Set(['unlogged', 'system', 'memory', 'toolDefs']);
+const prettyToolName = (name) => { const m = /^mcp__(.+?)__(.+)$/.exec(name); return m ? `${m[2]} · ${m[1]}` : name; };
+const BROWSER_TOOL = /screenshot|computer|navigate|browser|chrome|playwright|puppeteer|read_page|snapshot/i;
+/** What to try for each kind of item that fills the context. */
+function contextAdvice(it) {
+  switch (it.kind) {
+    case 'tool': return BROWSER_TOOL.test(it.name) ? 'Have the agent read page text or the accessibility tree; keep screenshots for visual checks.'
+      : /^(Read|View)$/.test(it.name) ? 'Be specific about the files in your prompt, search before reading, or hand wide exploration to a subagent: it has its own window and returns a summary.'
+      : /^(Bash|Shell|exec)/i.test(it.name) ? 'Trim command output (head, tail, grep, --quiet) before it comes back.'
+      : 'Ask for narrower results, or run it in a subagent so only a summary comes back.';
+    case 'mcpOutput': return 'Ask the server for fewer fields or pages, or call it less often.';
+    case 'mcpListing': return it.used ? 'An MCP server loads all its tools into every session: connect it only in the projects that use it, or use a skill instead, which loads only when needed.' : 'Its tools load into every session and it is never called: disconnect it.';
+    case 'skillListing': return it.used ? 'Its skill descriptions load every session: keep only the skills you use.' : 'Listed every session and never used: disable it.';
+    case 'skillLoad': return 'Each use loads its full instructions: trim the SKILL.md or split rarely needed parts into files it reads on demand.';
+    case 'hook': return 'Keep what the hook prints short, and scope it with a matcher so it runs only where needed.';
+    case 'unlogged': return 'The system prompt and built-in tool definitions: fixed by the app, but every MCP server and plugin you connect adds to them.';
+    case 'memory': return 'Trim CLAUDE.md and memory; move rarely needed detail to files the agent reads when it needs them.';
+    case 'growth': return 'Use /compact at natural breakpoints and /clear when you switch to an unrelated task; keep what must persist in CLAUDE.md.';
+    case 'reasoning': return 'Long reasoning stays in the context: lower the thinking effort for routine work.';
+    case 'assistantText': return 'Ask for shorter replies: results and decisions, not narration.';
+    default: return null;
+  }
+}
+
+/**
+ * What fills the main conversation's context, per session: the fixed part loaded before the first
+ * prompt and the part that grows with the work, every source and item (a tool's results, an MCP
+ * server's listing or output, a plugin's skill listing, a skill's loads, a hook, CLAUDE.md), the
+ * heaviest sessions, and the biggest item with what to try. Estimates: characters / 4.
+ */
+export function summarizeContext(sessions, ext = {}) {
+  const measured = sessions.filter((s) => s.context.estimated);
+  const n = measured.length;
+  if (!n) return { sessions: 0, sources: [], items: [], heaviest: [], bottleneck: null };
+  // The system prompt and built-in tool definitions are never logged: they are what the first reply's
+  // real window holds beyond everything logged before it.
+  const unlogged = (s) => (s.context.startTokens ? Math.max(0, s.context.startTokens - s.context.startLogged) : 0);
+  const sourcesOf = (s) => ({ ...s.context.sources, ...(unlogged(s) && { unlogged: unlogged(s) }) });
+  const totalOf = (s) => Object.values(sourcesOf(s)).reduce((x, v) => x + v, 0);
+  const fixedOf = (s) => Object.entries(sourcesOf(s)).reduce((x, [k, v]) => x + (FIXED_CONTEXT.has(k) ? v : 0), 0);
+  const all = {}, seen = {};
+  for (const s of measured) for (const [k, v] of Object.entries(sourcesOf(s))) { inc(all, k, v); if (v) inc(seen, k); }
+  const grand = Object.values(all).reduce((x, v) => x + v, 0) || 1;
+  const sources = Object.entries(all).sort((a, b) => b[1] - a[1]).map(([key, total]) => ({
+    key, group: FIXED_CONTEXT.has(key) ? 'fixed' : 'work', perSession: Math.round(total / n), share: +(total / grand).toFixed(3), sessions: seen[key] || 0 }));
+
+  // item by item: each is a total over the measured sessions
+  const items = [];
+  const add = (kind, name, total, extra = {}) => { if (total > 0) items.push({ kind, name, total: Math.round(total), perSession: Math.round(total / n), share: +(total / grand).toFixed(3), ...extra }); };
+  const toolOut = {}, toolSessions = {};
+  for (const s of measured) for (const [t, v] of Object.entries(s.context.toolOutputByTool)) if (!/^mcp__/.test(t)) { inc(toolOut, t, v); inc(toolSessions, t); }
+  for (const [t, v] of Object.entries(toolOut)) add('tool', t, v, { sessions: toolSessions[t] });
+  for (const m of ext.mcpServers || []) {
+    add('mcpOutput', m.name, m.outputTokens, { sessions: m.sessionsUsed });
+    add('mcpListing', m.name, m.listingTokens * m.sessionsLoaded, { sessions: m.sessionsLoaded, used: m.calls > 0 });
+  }
+  const personal = (ext.skills || []).filter((k) => !k.plugin);
+  for (const p of ext.plugins || []) if (p.verdict !== 'disabled') add('skillListing', p.name, p.listingTokens * p.sessionsLoaded, { sessions: p.sessionsLoaded, used: p.uses > 0 });
+  for (const k of personal) add('skillListing', k.name, k.listingTokens * k.sessionsLoaded, { sessions: k.sessionsLoaded, used: k.uses > 0 });
+  for (const k of ext.skills || []) if (k.tokensPerLoad) add('skillLoad', k.name, k.tokensPerLoad * k.uses, { sessions: k.sessionsUsed, perLoad: k.tokensPerLoad });
+  for (const h of ext.hooks || []) add('hook', h.name, h.injectedTokens, { sessions: h.sessions });
+  for (const k of ['unlogged', 'memory', 'reasoning', 'assistantText']) add(k, k, all[k] || 0, { sessions: seen[k] || 0 });
+  items.sort((a, b) => b.total - a.total);
+  for (const it of items) it.advice = contextAdvice(it);
+
+  const totals = measured.map(totalOf), fixed = measured.map(fixedOf);
+  const heaviest = [...measured].sort((a, b) => b.peakContext - a.peakContext || totalOf(b) - totalOf(a)).slice(0, 8).map((s) => {
+    const top = Object.entries(s.context.sources).sort((a, b) => b[1] - a[1])[0];
+    const tool = Object.entries(s.context.toolOutputByTool).sort((a, b) => b[1] - a[1])[0];
+    return { id: s.id, title: s.title, start: s.start ? new Date(s.start).toISOString() : null, task: s.task.primary, peakContext: s.peakContext, estimated: totalOf(s),
+      topSource: top ? { key: top[0], tokens: top[1] } : null, topTool: tool ? { name: prettyToolName(tool[0]), tokens: tool[1] } : null, compactions: s.context.compactions };
+  });
+  const big = items.find((it) => !['unlogged', 'reasoning', 'assistantText'].includes(it.kind)) || null; // something you can change
+  return {
+    sessions: n,
+    perSession: { median: median(totals), p90: [...totals].sort((a, b) => a - b)[Math.floor(0.9 * (n - 1))], fixedMedian: median(fixed),
+      fixedShare: +(fixed.reduce((x, v) => x + v, 0) / Math.max(1, totals.reduce((x, v) => x + v, 0))).toFixed(3),
+      startMedian: median(measured.map((s) => s.context.startTokens)), peakMedian: median(measured.map((s) => s.peakContext)),
+      // real tokens, not the estimate: how much of the largest window was already there at the first reply
+      startShare: median(measured.filter((s) => s.context.startTokens && s.peakContext).map((s) => +(s.context.startTokens / s.peakContext).toFixed(3))) },
+    sources, items: items.slice(0, 20), heaviest,
+    bottleneck: big && { ...big, name: big.kind === 'tool' ? prettyToolName(big.name) : big.name },
+  };
+}
+
+const mainModel = (s) => Object.entries(s.models || {}).filter(([m]) => m && !/synthetic/.test(m)).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+// ---------------------------------------------------------------------------
+// Cost — where the spend goes: by task, model and project, the token mix, the priciest sessions
+// ---------------------------------------------------------------------------
+/**
+ * Spend grouped the ways you can act on: by task, by the session's main model, by project; the
+ * token mix (cache reads are cheap per token but add up); and the sessions that cost the most, with
+ * what drove them. A session's cost is the agent's own record; nothing is priced here.
+ */
+export function summarizeCost(sessions) {
+  const paid = sessions.filter((s) => s.costUsd > 0);
+  const total = paid.reduce((x, s) => x + s.costUsd, 0);
+  const label = Object.fromEntries(TASKS.map((t) => [t.id, t.label]));
+  const group = (keyOf, name = (k) => k) => {
+    const g = {};
+    for (const s of paid) { const k = keyOf(s) || 'unknown'; const x = (g[k] = g[k] || { key: k, name: name(k), usd: 0, sessions: 0 }); x.usd += s.costUsd; x.sessions++; }
+    return Object.values(g).map((x) => ({ ...x, usd: +x.usd.toFixed(2), perSession: +(x.usd / x.sessions).toFixed(2), share: total ? +(x.usd / total).toFixed(3) : 0 })).sort((a, b) => b.usd - a.usd);
+  };
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  for (const s of sessions) for (const k of Object.keys(tokens)) tokens[k] += s.tokens[k] || 0;
+  const priciest = [...paid].sort((a, b) => b.costUsd - a.costUsd).slice(0, 8).map((s) => {
+    const top = Object.entries(s.context.sources).sort((a, b) => b[1] - a[1])[0];
+    return { id: s.id, title: s.title, start: s.start ? new Date(s.start).toISOString() : null, task: s.task.primary, model: mainModel(s), usd: s.costUsd,
+      prompts: s.turns.human, turns: s.turns.assistant, toolCalls: s.tools.total, peakContext: s.peakContext, compactions: s.context.compactions,
+      subagentRuns: s.subagents.runs, topSource: top ? top[0] : null, share: total ? +(s.costUsd / total).toFixed(3) : 0 };
+  });
+  // how concentrated: the share of spend in the costliest fifth of sessions
+  const sorted = paid.map((s) => s.costUsd).sort((a, b) => b - a);
+  const topFifth = sorted.slice(0, Math.max(1, Math.round(sorted.length / 5))).reduce((x, v) => x + v, 0);
+  return {
+    sessions: paid.length, usd: +total.toFixed(2), perSession: paid.length ? +(total / paid.length).toFixed(2) : 0, medianSession: +(median(sorted) || 0).toFixed(2),
+    topFifthShare: total ? +(topFifth / total).toFixed(3) : 0,
+    byTask: group((s) => s.task.primary, (k) => label[k] || k), byModel: group(mainModel), byProject: group((s) => s.project),
+    tokens, priciest,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Agent output — what the agent writes, and how your setup lines up with how sessions go
+// ---------------------------------------------------------------------------
+const OUTPUT_PARTS = { assistantText: 'Replies to you', reasoning: 'Reasoning', toolInput: 'Tool calls and edits' };
+/** Outcome measures for a group of sessions: lower is better except where noted. */
+function outcomes(list) {
+  const add = (f) => list.reduce((x, s) => x + f(s), 0);
+  const human = add((s) => s.turns.human), calls = add((s) => s.tools.total);
+  return {
+    sessions: list.length,
+    outputPerSession: median(list.map((s) => s.tokens.output)),
+    costPerSession: +(median(list.map((s) => s.costUsd)) || 0).toFixed(2),
+    promptsPerSession: median(list.map((s) => s.turns.human)),
+    correctionRate: human ? +(add((s) => s.turns.pushback) / human).toFixed(3) : 0,
+    toolErrorRate: calls ? +(add((s) => s.tools.errors) / calls).toFixed(3) : 0,
+    fixLoopsPerSession: list.length ? +(add((s) => s.signals.fixLoops) / list.length).toFixed(2) : 0,
+  };
+}
+const OUTPUT_MIN = 3; // sessions on each side before a with/without comparison is shown
+
+/**
+ * What the agent writes (replies, reasoning, tool calls) and, per model, skill, MCP server and
+ * plugin, how sessions with it compare with sessions without: output, cost, prompts, corrections,
+ * failed tool calls, fix loops. Correlation only: tasks differ, so each row names its main task.
+ */
+export function summarizeOutput(sessions) {
+  const list = sessions.filter((s) => s.turns.assistant);
+  if (!list.length) return { sessions: 0, mix: [], byModel: [], factors: [] };
+  const mix = {};
+  for (const s of list) if (s.context.estimated) for (const k of Object.keys(OUTPUT_PARTS)) inc(mix, k, s.context.sources[k] || 0);
+  const mixTotal = Object.values(mix).reduce((x, v) => x + v, 0) || 1;
+  const taskOf = (group) => { const t = {}; for (const s of group) inc(t, s.task.primary); const top = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; return top ? { id: top[0], share: +(top[1] / group.length).toFixed(2) } : null; };
+  const byModelMap = {};
+  for (const s of list) { const m = mainModel(s); if (m) (byModelMap[m] = byModelMap[m] || []).push(s); }
+  const byModel = Object.entries(byModelMap).map(([model, g]) => ({ model, ...outcomes(g), topTask: taskOf(g) })).sort((a, b) => b.sessions - a.sessions);
+  const pluginOf = (name) => (name.includes(':') ? name.split(':')[0] : null);
+  const mcpPlugin = (key) => { const m = /^plugin_([^_]+)_/.exec(mcpKey(key)); return m ? m[1] : null; };
+  const uses = (s) => {
+    const out = [];
+    for (const k of Object.keys(s.skills || {})) { out.push(['skill', k]); if (pluginOf(k)) out.push(['plugin', pluginOf(k)]); }
+    for (const k of Object.keys(s.mcpServers || {})) { out.push(['mcp', k]); if (mcpPlugin(k)) out.push(['plugin', mcpPlugin(k)]); }
+    return out;
+  };
+  const groups = {};
+  for (const s of list) for (const [kind, name] of new Map(uses(s).map((x) => [x.join('\u0000'), x])).values()) {
+    const g = (groups[`${kind}:${name}`] = groups[`${kind}:${name}`] || { kind, name, ids: new Set() }); g.ids.add(s);
+  }
+  const factors = Object.values(groups).filter((g) => g.ids.size >= OUTPUT_MIN && list.length - g.ids.size >= OUTPUT_MIN).map((g) => {
+    const w = [...g.ids], wo = list.filter((s) => !g.ids.has(s));
+    return { kind: g.kind, name: g.name, with: outcomes(w), without: outcomes(wo), topTask: taskOf(w) };
+  }).sort((a, b) => b.with.sessions - a.with.sessions);
+  const out = list.map((s) => s.tokens.output);
+  return {
+    sessions: list.length, minSessions: OUTPUT_MIN,
+    outputTokens: out.reduce((x, v) => x + v, 0), outputPerSession: median(out),
+    outputPerPrompt: median(list.filter((s) => s.turns.human).map((s) => Math.round(s.tokens.output / s.turns.human))),
+    mix: Object.entries(OUTPUT_PARTS).map(([key, label]) => ({ key, label, tokens: mix[key] || 0, share: +((mix[key] || 0) / mixTotal).toFixed(3) })),
+    overall: outcomes(list), byModel, factors,
   };
 }
 

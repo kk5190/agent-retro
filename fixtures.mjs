@@ -185,6 +185,7 @@ export function writeDemo(home) {
     const sid = `demo-${String(k).padStart(2, '0')}`;
     let t = now - (plan.length - k) * 2.5 * 864e5 + Math.floor(9 + r() * 10) * 3600e3;
     let ctx = 20000;
+    const model = ['research', 'review', 'git'].includes(a.task) ? 'claude-sonnet-5' : 'claude-opus-5-5'; // lighter work on the lighter model
     const at = () => new Date((t += (40 + r() * 140) * 1000)).toISOString();
     const base = (extra) => ({ sessionId: sid, cwd: '/home/dev/app', gitBranch: `work/${a.task}-${i}`, uuid: `${sid}-${Math.round(r() * 1e9)}`, ...extra });
     const lines = [
@@ -196,9 +197,10 @@ export function writeDemo(home) {
     ];
     const assistantTool = (name, input, id) => {
       ctx += 3000 + Math.round(r() * 9000);
-      return J(base({ type: 'assistant', timestamp: at(), message: { model: 'claude-opus-5-5', role: 'assistant',
+      const thinking = model === 'claude-opus-5-5' ? [{ type: 'thinking', thinking: 'Weighing the options before the next step. '.repeat(2 + (id.length * 7) % 8) }] : [];
+      return J(base({ type: 'assistant', timestamp: at(), message: { model, role: 'assistant',
         usage: { input_tokens: 400, output_tokens: 300 + Math.round(r() * 900), cache_read_input_tokens: ctx, cache_creation_input_tokens: 2000 },
-        content: [{ type: 'text', text: 'Working on it.' }, { type: 'tool_use', id, name, input }] } }));
+        content: [...thinking, { type: 'text', text: 'Working on it.' }, { type: 'tool_use', id, name, input }] } }));
     };
     const result = (id, out, isErr) => J(base({ type: 'user', timestamp: at(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: !!isErr,
       content: out === 'IMAGE' ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }] : out }] } }));
@@ -212,13 +214,13 @@ export function writeDemo(home) {
     });
     // extras: a fix loop on one file, an interruption, and a call that never got its result
     const tick = () => new Date((t += 30000)).toISOString();
-    const call = (name, input, id) => J(base({ type: 'assistant', timestamp: tick(), message: { model: 'claude-opus-5-5', role: 'assistant', usage: { input_tokens: 200, output_tokens: 200, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'tool_use', id, name, input }] } }));
+    const call = (name, input, id) => J(base({ type: 'assistant', timestamp: tick(), message: { model, role: 'assistant', usage: { input_tokens: 200, output_tokens: 200, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'tool_use', id, name, input }] } }));
     const done = (id, out, isErr) => J(base({ type: 'user', timestamp: tick(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: !!isErr, content: out }] } }));
     if (a.task === 'debug' && q() < 0.5) for (let x = 0; x < 3; x++) lines.push(call('Edit', { file_path: '/home/dev/app/src/checkout.ts' }, `${sid}-loop${x}`), done(`${sid}-loop${x}`, 'ok'));
     if (q() < 0.3) lines.push(call('Bash', { command: 'npm run dev' }, `${sid}-int`), done(`${sid}-int`, "The user doesn't want to proceed with this tool use. The tool use was rejected.", true),
       J(base({ type: 'user', timestamp: tick(), message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } })));
     if (k % 12 === 5) lines.push(call('Bash', { command: 'npm run build' }, `${sid}-lost`)); // the session was killed mid-call
-    lines.push(J(base({ type: 'assistant', timestamp: at(), message: { model: 'claude-opus-5-5', role: 'assistant', usage: { input_tokens: 300, output_tokens: 600, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'text', text: 'Done.' }] } })));
+    lines.push(J(base({ type: 'assistant', timestamp: at(), message: { model, role: 'assistant', usage: { input_tokens: 300, output_tokens: 600, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'text', text: 'Done.' }] } })));
     lines.push(J({ type: 'ai-title', sessionId: sid, aiTitle: a.title(i) }));
     lines.push(J({ type: 'cost-state', sessionId: sid, totalCostUSD: +(0.4 + r() * 5).toFixed(2), modelUsage: {} }));
     put(`.claude/projects/-home-dev-app/${sid}.jsonl`, lines.join('\n') + '\n');

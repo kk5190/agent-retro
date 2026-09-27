@@ -214,6 +214,27 @@
   .stack i { display: block; height: 100%; min-width: 2px; }
   .stack i:first-child { border-radius: 4px 0 0 4px; } .stack i:last-child { border-radius: 0 4px 4px 0; }
   .stack i:hover { filter: brightness(1.12); }
+  .stack.tall { height: 22px; }
+  .bottleneck .bn { margin-top: 14px; border-left: 4px solid var(--signal); }
+  .bn h3 { font: 400 22px/1.3 var(--serif); margin: 4px 0 6px; }
+  .bn-num { margin: 0 0 8px; font: 400 32px/1.1 var(--display); letter-spacing: -0.03em; }
+  .bn-num .bn-unit { font: 400 13px var(--body); letter-spacing: 0; color: var(--ink-3); }
+  .bn p { margin: 0; color: var(--ink-2); }
+  .kindtag { display: inline-block; font: 600 10px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); background: var(--inset); border-radius: 999px; padding: 2px 8px; margin-right: 4px; vertical-align: 1px; }
+  .kindtag.k-unlogged, .kindtag.k-memory { background: var(--ink); color: var(--paper); }
+  .kindtag.k-tool, .kindtag.k-mcpOutput { background: var(--signal-soft); color: var(--signal); }
+  td.advice { font-family: var(--body); font-size: 12.5px; color: var(--ink-2); text-align: left; white-space: normal; min-width: 260px; }
+  #ctxItems td:nth-child(3) { white-space: nowrap; }
+  #ctxHeavy td:last-child, #pricey td:nth-child(3), #pricey td:last-child, #outModels td:nth-child(3), #outSetup td:nth-child(3) { font-family: var(--body); font-size: 12.5px; }
+  .sharebar { display: inline-block; width: 60px; height: 6px; margin-right: 8px; background: var(--inset); border-radius: 3px; vertical-align: middle; overflow: hidden; }
+  .sharebar i { display: block; height: 100%; background: var(--signal); }
+  td .sub { font: 11.5px var(--body); color: var(--ink-3); }
+  td .dim, .dim { color: var(--ink-3); }
+  .spark { margin-top: 10px; display: flex; align-items: end; gap: 10px; }
+  .spark svg { flex: 1; height: 30px; }
+  .spark rect { fill: var(--bar); } .spark rect.pk { fill: var(--signal); } .spark rect:hover { fill: var(--ink-2); }
+  .spark a { font-size: 11.5px; color: var(--ink-3); text-decoration: none; white-space: nowrap; }
+  .spark a:hover { color: var(--signal); }
   .keys { display: grid; gap: 7px; width: 100%; font-size: 13px; }
   .keys div { display: flex; align-items: center; gap: 8px; }
   .keys i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
@@ -505,6 +526,8 @@
     <a href="#review" data-page="review"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12l2 2 4-4"/></svg><span>Review</span></a>
     <a href="#work" data-page="work"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/></svg><span>Work</span></a>
     <a href="#cost" data-page="cost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M14.5 9.2c-.5-.9-1.5-1.4-2.6-1.4-1.5 0-2.6.8-2.6 2 0 2.8 5.4 1.5 5.4 4.3 0 1.2-1.2 2.1-2.8 2.1-1.2 0-2.3-.6-2.8-1.6M12 6.5v11"/></svg><span>Cost</span></a>
+    <a href="#context" data-page="context"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Context</span></a>
+    <a href="#output" data-page="output"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Output</span></a>
     <a href="#setup" data-page="setup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Setup</span></a>
     <a href="#habits" data-page="habits"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><span>Habits</span></a>
     <a href="#sessions" data-page="sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Sessions</span></a>
@@ -573,11 +596,6 @@
         <a class="share-link" href="#digest" id="shareBtn">Summary <span aria-hidden="true">↗</span></a>
       </div>
       <div class="kpis" id="homeKpis"></div>
-      <div class="panel" style="margin-bottom:14px">
-        <div class="peek-head"><h3>Spend per day</h3><a href="#cost">Open the cost page →</a></div>
-        <p class="hint" style="margin-top:-8px">Recorded spend, counted on the day each session started, with the 7-day average.</p>
-        <div class="chart" id="homeSpend"></div>
-      </div>
       <div class="areas" id="areas" role="list"></div>
       <div class="peek panel" id="peek" aria-live="polite"></div>
       <div class="grid g2 gap">
@@ -673,27 +691,28 @@
   <div class="page" id="page-cost" hidden>
     <section id="tokens" class="part">
       <header>
-        <h2>Where do the tokens go?</h2>
-        <p>The agent re-reads its whole context on every turn, so a bigger context costs more per turn and gets compacted sooner. The breakdown estimates what fills the context of the main conversation.</p>
+        <h2>Where does the money go?</h2>
+        <p>Recorded spend, split the ways you can act on: by task, model and project, the kind of tokens it paid for, and the sessions that cost the most. A session's cost is the agent's own record; nothing is priced here.</p>
       </header>
       <div class="kpis" id="tokKpis"></div>
-      <div class="grid g2">
-        <div class="panel">
-          <h3>What fills the context <span class="est">Estimate</span></h3>
-          <p class="hint">Tokens that entered the main conversation, by source. Subagents have their own context and are left out.</p>
-          <div class="bars" id="ctxSources"></div>
-        </div>
-        <div class="panel">
-          <h3>Tool results, by tool <span class="est">Estimate</span></h3>
-          <p class="hint">Which tools put the most text or images back into the conversation.</p>
-          <div class="bars" id="ctxTools"></div>
-        </div>
-      </div>
-      <div class="panel gap">
+      <div class="panel">
         <h3>Spend per day</h3>
-        <p class="hint">Recorded spend, counted on the day each session started (the logs give cost per session, not per turn), with the 7-day average.</p>
+        <p class="hint">Counted on the day each session started (the logs give cost per session, not per turn), with the 7-day average.</p>
         <div class="chart" id="costSpend"></div>
         <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="spendTable"></table></div></details>
+      </div>
+      <div class="grid g2 gap">
+        <div class="panel"><h3>By task</h3><p class="hint">Spend and cost per session for each kind of work.</p><div class="bars" id="costTask"></div></div>
+        <div class="panel"><h3>By model</h3><p class="hint">Each session counts under the model that wrote most of its replies.</p><div class="bars" id="costModel"></div></div>
+      </div>
+      <div class="grid g2 gap">
+        <div class="panel"><h3>What the tokens were</h3><p class="hint">Every turn re-reads the context. Cache reads are the cheapest per token, but with a large context they are most of the volume: a smaller context shrinks all of them.</p><div class="bars" id="costTokens"></div></div>
+        <div class="panel"><h3>By project</h3><p class="hint">Spend per project folder.</p><div class="bars" id="costProject"></div></div>
+      </div>
+      <div class="panel gap scroll">
+        <h3>The costliest sessions</h3>
+        <p class="hint" id="priceyHint">What they have in common is usually the lever: long runs, a big context, many tool calls. Select one to open it.</p>
+        <table id="pricey"></table>
       </div>
       <div class="panel gap">
         <h3>Tokens per day</h3>
@@ -701,6 +720,56 @@
         <div class="lkeys"><span><i class="colkey"></i>Each day</span><span><i class="peakkey"></i>Busiest day</span><span><i></i>7-day average</span></div>
         <div class="chart" id="tokTrend"></div>
         <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="tokTable"></table></div></details>
+      </div>
+    </section>
+  </div>
+  <div class="page" id="page-context" hidden>
+    <section id="context" class="part">
+      <header>
+        <h2>What fills your context?</h2>
+        <p>Everything in the context window is re-read on every turn: it costs tokens, and a fuller window gets compacted sooner and loses detail. This page splits a typical session into what is loaded before you type (the system prompt, tool and MCP listings, skills, CLAUDE.md, start-up hooks) and what your work adds (tool results, skill instructions, replies), item by item. <span class="est">Estimate</span></p>
+      </header>
+      <div class="kpis" id="ctxKpis"></div>
+      <div class="bottleneck" id="ctxBottleneck"></div>
+      <div class="panel gap">
+        <h3>A typical session, by source</h3>
+        <p class="hint">Tokens per session on average. Solid: loaded before your first prompt, every session. Lighter: added as the session works.</p>
+        <div class="stack tall" id="ctxStack" aria-hidden="true"></div><div class="keys" id="ctxKeys"></div>
+      </div>
+      <div class="panel gap scroll">
+        <h3>Item by item</h3>
+        <p class="hint">The tools, servers, plugins, skills, hooks and files behind those sources, largest first, with what to try. Per session is the average over sessions in this period.</p>
+        <table id="ctxItems"></table>
+      </div>
+      <div class="grid g2 gap">
+        <div class="panel"><h3>Tool results, by tool</h3><p class="hint">Which tools put the most text or images back into the conversation.</p><div class="bars" id="ctxTools"></div></div>
+        <div class="panel scroll"><h3>Heaviest sessions</h3><p class="hint">By the largest context they reached. Select one to open it.</p><table id="ctxHeavy"></table></div>
+      </div>
+      <p class="table-note">Estimated from the logs at about 4 characters a token. The system prompt and built-in tool definitions are not logged: they are the first reply's real context minus everything logged before it. Subagents have their own window and are left out. For one live session, run <code>/context</code> in Claude Code.</p>
+    </section>
+  </div>
+  <div class="page" id="page-output" hidden>
+    <section id="output" class="part">
+      <header>
+        <h2>What does the agent write, and does your setup help?</h2>
+        <p>The agent's output (its replies, its reasoning, and the tool calls and edits it writes), then the same sessions grouped by your setup: the model, and each skill, MCP server and plugin, against the sessions without it.</p>
+      </header>
+      <div class="kpis" id="outKpis"></div>
+      <div class="panel">
+        <h3>Where the output goes</h3>
+        <p class="hint">What the agent wrote into the main conversation. <span class="est">Estimate</span></p>
+        <div class="stack tall" id="outStack" aria-hidden="true"></div><div class="keys" id="outKeys"></div>
+      </div>
+      <div class="panel gap scroll">
+        <h3>By model</h3>
+        <p class="hint">Each session counts under the model that wrote most of its replies. Medians per session; corrections and failed calls are shares of all prompts and calls.</p>
+        <table id="outModels"></table>
+      </div>
+      <div class="panel gap scroll">
+        <h3>Your setup against how sessions went</h3>
+        <p class="hint" id="outSetupHint">Sessions that used each skill, MCP server or plugin, against the sessions that did not. Green is better, orange is worse.</p>
+        <table id="outSetup"></table>
+        <p class="table-note">This is correlation, not proof: a skill used only for hard debugging will look worse than the average. The main task of each group is shown so you can judge like with like.</p>
       </div>
     </section>
   </div>
@@ -1118,21 +1187,113 @@ function renderTasks(a) {
 
 /* ---- tokens ---- */
 function renderTokens(a) {
-  const tk = a.tokens || {}, c = a.cost || {}, cx = a.context || {}, cb = a.contextBreakdown || {};
+  const tk = a.tokens || {}, cx = a.context || {}, cb = a.costBreakdown || {};
   kpis('tokKpis', [
-    ['recorded spend', c.usd ? '$' + c.usd.toLocaleString() : '—', c.usd ? 'from the agents’ cost logs' : 'no agent logged cost'],
+    ['recorded spend', cb.usd ? usd(cb.usd) : '—', cb.usd ? `${fmt(cb.sessions)} sessions with a cost` : 'no agent logged cost'],
+    ['per session', cb.sessions ? usd(cb.perSession) : '—', cb.sessions ? `median ${usd(cb.medianSession)}` : ''],
+    ['costliest fifth', cb.sessions ? rate(cb.topFifthShare) : '—', 'of spend, from a fifth of the sessions'],
     ['tokens processed', fmtN(tk.total), `${fmtN(tk.output)} written by the agent`],
     ['served from cache', (cx.cacheHitRate || 0) + '%', 'of input tokens'],
-    ['typical context', fmtN(cx.median), `9 in 10 turns under ${fmtN(cx.p90)}`],
-    ['compactions', fmt(cb.compactions || 0), `${fmt(cx.highTurns || 0)} turns over 150k`],
   ]);
-  const src = topN(cb.sources, 12); const srcTotal = sum(cb.sources);
-  bars('ctxSources', src, { total: srcTotal, label: ctxLabel, value: fmtN, hot: (k) => k === (src[0] || [])[0] && src[0][1] / srcTotal >= 0.4 });
-  bars('ctxTools', topN(cb.toolOutputByTool, 8), { total: sum(cb.toolOutputByTool), label: prettyTool, value: fmtN });
   lineChart('costSpend', (a.cost && a.cost.daily) || [], (d) => d.n, usd, 'Spend');
   dailyTable('spendTable', a.cost && a.cost.daily, (d) => d.n, usd);
+  const money$ = (list) => list.map((x) => [x.name, x.usd, x]);
+  const moneyBars = (id, list, label = (k) => k) => bars(id, money$(list || []).map(([k, v]) => [k, v]), { total: cb.usd, value: (v) => usd(v), label });
+  moneyBars('costTask', cb.byTask); moneyBars('costModel', cb.byModel, shortModel); moneyBars('costProject', cb.byProject);
+  const t = cb.tokens || {};
+  bars('costTokens', [['Cache reads', t.cacheRead], ['Cache writes', t.cacheWrite], ['Output (written by the agent)', t.output], ['Fresh input', t.input]].filter(([, v]) => v), { total: (t.cacheRead || 0) + (t.cacheWrite || 0) + (t.output || 0) + (t.input || 0), value: fmtN });
+  const P = cb.priciest || [];
+  $('pricey').innerHTML = P.length ? '<tr><th>Session</th><th>Cost</th><th>Model</th><th>Prompts</th><th>Tool calls</th><th title="The largest context it reached">Peak context</th><th>Biggest context source</th></tr>'
+    + P.map((x) => `<tr class="pick" tabindex="0" data-id="${esc(x.id)}"><td>${esc(x.title || x.id)}<div class="sub">${esc(taskLabel(x.task))} · ${esc(x.start ? dateStr(ymd(Date.parse(x.start))) : '—')}</div></td><td>${usd(x.usd)} <span class="dim">${rate(x.share)}</span></td><td>${esc(shortModel(x.model))}</td><td>${fmt(x.prompts)}</td><td>${fmt(x.toolCalls)}</td><td>${fmtN(x.peakContext)}${x.compactions ? ` · ${x.compactions} compacted` : ''}</td><td>${esc(x.topSource ? ctxLabel(x.topSource) : '—')}</td></tr>`).join('')
+    : '<tr><td class="empty">No session logged a cost in this period.</td></tr>';
+  pickSessions('pricey');
   lineChart('tokTrend', tk.daily || [], (d) => d.n, fmtN, 'Tokens');
   dailyTable('tokTable', tk.daily, (d) => d.n, fmtN);
+}
+
+/* ---- context: what fills the window, item by item ---- */
+const SRC_COLOR = { unlogged: 'var(--ink-3)', system: 'var(--ink-2)', memory: 'var(--s5)', toolDefs: 'var(--s4)', hooks: 'var(--s2)', toolOutput: 'var(--s1)', skills: 'var(--s3)', reasoning: 'var(--s6)' };
+const ITEM_KIND = { tool: 'Tool results', mcpOutput: 'MCP output', mcpListing: 'MCP tools listed', skillListing: 'Skills listed', skillLoad: 'Skill loaded', hook: 'Hook output', memory: 'CLAUDE.md & memory', unlogged: 'System prompt & built-in tools', reasoning: 'Reasoning', assistantText: 'Agent replies' };
+/** One stacked bar and its legend: [key, label, value, colour, lighter?] */
+function stackOf(barId, keyId, parts, fmtV) {
+  const total = parts.reduce((x, p) => x + p[2], 0) || 1;
+  $(barId).innerHTML = parts.map(([, label, v, c, light]) => `<i style="width:${(100 * v / total).toFixed(2)}%;background:${c};${light ? 'opacity:.62' : ''}" title="${esc(label)}"></i>`).join('');
+  $(keyId).innerHTML = parts.map(([, label, v, c, light]) => `<div><i style="background:${c};${light ? 'opacity:.62' : ''}"></i>${esc(label)}<span>${fmtV(v)}<em>${pct(v, total)}</em></span></div>`).join('');
+}
+function renderContext(a) {
+  const C = a.contextAnalysis || {}, ps = C.perSession || {}, cb = a.contextBreakdown || {};
+  if (!C.sessions) {
+    kpis('ctxKpis', [['sessions measured', '0', 'this agent logs no context detail']]);
+    ['ctxBottleneck', 'ctxStack', 'ctxKeys', 'ctxItems', 'ctxHeavy'].forEach((id) => { $(id).innerHTML = ''; });
+    bars('ctxTools', []); return;
+  }
+  kpis('ctxKpis', [
+    ['starts at', fmtN(ps.startMedian || 0), 'tokens at the first reply, before any work'],
+    ['grows to', fmtN(ps.peakMedian || 0), 'the largest context a session reaches (median)'],
+    ['there before you type', ps.startShare != null ? rate(ps.startShare) : rate(ps.fixedShare), ps.startShare != null ? 'of the largest context, at the first reply' : 'of the estimated context, every session'],
+    ['compactions', fmt(cb.compactions || 0), `${fmt(cb.compactedSessions || 0)} sessions ran out of room`],
+  ]);
+  const b = C.bottleneck;
+  $('ctxBottleneck').innerHTML = b ? `<div class="panel bn"><p class="label">Biggest thing you can change</p><h3>${esc(ITEM_KIND[b.kind] || b.kind)}${itemName(b) ? `: ${esc(itemName(b))}` : ''}</h3>
+      <p class="bn-num">${numHtml(fmtN(b.perSession))} <span class="bn-unit">tokens a session · ${rate(b.share)} of the estimated context${b.sessions ? ` · in ${fmt(b.sessions)} of ${fmt(C.sessions)} sessions` : ''}</span></p>
+      <p>${esc(b.advice || '')}</p>${ps.peakMedian > 1.5 * (ps.startMedian || 0) ? `<p class="hint" style="margin:8px 0 0">Sessions grow to ${fmtN(ps.peakMedian)} from ${fmtN(ps.startMedian)}: ${rate(1 - (ps.startShare || 0))} of it comes from the work. Use <code>/compact</code> at natural breakpoints and <code>/clear</code> between unrelated tasks.</p>` : ''}</div>` : '';
+  const S = [...C.sources].sort((x, y) => (x.group === y.group ? y.perSession - x.perSession : x.group === 'fixed' ? -1 : 1));
+  stackOf('ctxStack', 'ctxKeys', S.map((x) => [x.key, ctxLabel(x.key), x.perSession, SRC_COLOR[x.key] || 'var(--s-other)', x.group === 'work']), (v) => fmtN(v) + ' / session');
+  const I = C.items || [];
+  const maxShare = Math.max(...I.map((x) => x.share), 0.001);
+  $('ctxItems').innerHTML = '<tr><th>Item</th><th>Per session</th><th>Share</th><th>Sessions</th><th>What to try</th></tr>' + I.slice(0, 15).map((x) => `<tr>
+      <td><span class="kindtag k-${esc(x.kind)}">${esc(ITEM_KIND[x.kind] || x.kind)}</span>${itemName(x) ? ` ${esc(itemName(x))}` : ''}${x.used === false ? ' <span class="chip-v unused">never used</span>' : ''}${x.perLoad ? `<div class="sub">${fmtN(x.perLoad)} each load</div>` : ''}</td>
+      <td>${fmtN(x.perSession)}</td><td><span class="sharebar"><i style="width:${(100 * x.share / maxShare).toFixed(1)}%"></i></span>${rate(x.share)}</td><td>${fmt(x.sessions || 0)}</td><td class="advice">${esc(x.advice || '')}</td></tr>`).join('');
+  bars('ctxTools', topN(cb.toolOutputByTool, 8), { total: sum(cb.toolOutputByTool), label: prettyTool, value: fmtN });
+  const H = C.heaviest || [];
+  $('ctxHeavy').innerHTML = '<tr><th>Session</th><th>Peak</th><th>Biggest source</th></tr>' + H.map((x) => `<tr class="pick" tabindex="0" data-id="${esc(x.id)}"><td>${esc(x.title || x.id)}<div class="sub">${esc(taskLabel(x.task))}${x.topTool ? ` · most from ${esc(x.topTool.name)}` : ''}</div></td><td>${fmtN(x.peakContext)}${x.compactions ? `<div class="sub">${x.compactions} compacted</div>` : ''}</td><td>${esc(x.topSource ? ctxLabel(x.topSource.key) : '—')}</td></tr>`).join('');
+  pickSessions('ctxHeavy');
+}
+const itemName = (x) => (x.kind === 'tool' ? prettyTool(x.name) : ['memory', 'unlogged', 'reasoning', 'assistantText'].includes(x.kind) ? '' : x.name);
+
+/* ---- output: what the agent writes, and the setup against how sessions went ---- */
+const shortModel = (m) => (m ? m.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : '—');
+function renderOutput(a) {
+  const O = a.agentOutput || {};
+  if (!O.sessions) { kpis('outKpis', [['sessions', '0', 'nothing in this period']]); ['outStack', 'outKeys', 'outModels', 'outSetup'].forEach((id) => { $(id).innerHTML = ''; }); return; }
+  const mixOf = (k) => (O.mix.find((x) => x.key === k) || {}).share || 0;
+  kpis('outKpis', [
+    ['output per session', fmtN(O.outputPerSession), `${fmtN(O.outputTokens)} tokens in all`],
+    ['per prompt', fmtN(O.outputPerPrompt), 'tokens the agent writes for each prompt you send'],
+    ['reasoning', rate(mixOf('reasoning')), 'of what it writes'],
+    ['corrections', rate(O.overall.correctionRate), `${rate(O.overall.toolErrorRate)} of tool calls fail`],
+  ]);
+  const MIX_COLOR = { assistantText: 'var(--s1)', reasoning: 'var(--s5)', toolInput: 'var(--s3)' };
+  stackOf('outStack', 'outKeys', O.mix.map((x) => [x.key, x.label, x.tokens, MIX_COLOR[x.key]]), fmtN);
+  const row = (m) => `<td>${fmtN(m.outputPerSession)}</td><td>${usd(m.costPerSession)}</td><td>${fmt(m.promptsPerSession)}</td><td>${rate(m.correctionRate)}</td><td>${rate(m.toolErrorRate)}</td><td>${m.fixLoopsPerSession}</td>`;
+  const head = '<th>Output</th><th>Cost</th><th>Prompts</th><th>Corrections</th><th>Failed calls</th><th>Fix loops</th>';
+  $('outModels').innerHTML = `<tr><th>Model</th><th>Sessions</th><th>Main task</th>${head}</tr>` + O.byModel.map((m) => `<tr><td>${esc(shortModel(m.model))}</td><td>${fmt(m.sessions)}</td><td>${esc(m.topTask ? `${taskLabel(m.topTask.id)} ${rate(m.topTask.share)}` : '—')}</td>${row(m)}</tr>`).join('');
+  const F = O.factors || [];
+  $('outSetupHint').textContent = F.length ? `Sessions that used each skill, MCP server or plugin (with), against the other sessions in this period (vs), when each side has at least ${O.minSessions}. Green is better, orange is worse.`
+    : `Nothing to compare yet: a skill, MCP server or plugin needs at least ${O.minSessions} sessions with it and ${O.minSessions} without.`;
+  const KIND = { skill: 'Skill', mcp: 'MCP server', plugin: 'Plugin' };
+  const cmp = (w, wo, f) => { const d = wo ? (w - wo) / wo : w ? 1 : 0; const cls = Math.abs(d) < 0.1 ? '' : d < 0 ? 'v-better' : 'v-worse'; return `<td class="${cls}">${f(w)} <span class="dim">vs ${f(wo)}</span></td>`; };
+  $('outSetup').innerHTML = F.length ? `<tr><th>Setup</th><th>Used in</th><th>Main task</th><th>Cost / session</th><th>Prompts</th><th>Corrections</th><th>Failed calls</th></tr>` + F.map((x) => `<tr><td><span class="kindtag">${KIND[x.kind]}</span> ${esc(x.kind === 'mcp' ? x.name : x.name)}</td><td>${fmt(x.with.sessions)}</td><td>${esc(x.topTask ? `${taskLabel(x.topTask.id)} ${rate(x.topTask.share)}` : '—')}</td>
+      ${cmp(x.with.costPerSession, x.without.costPerSession, usd)}${cmp(x.with.promptsPerSession, x.without.promptsPerSession, fmt)}${cmp(x.with.correctionRate, x.without.correctionRate, rate)}${cmp(x.with.toolErrorRate, x.without.toolErrorRate, rate)}</tr>`).join('') : '';
+}
+/** Rows with data-id open that session on the Sessions page. */
+function pickSessions(id) {
+  $(id).querySelectorAll('tr.pick').forEach((tr) => {
+    const go = () => { $('sessSearch').value = ''; $('taskFilter').value = ''; keepSession = tr.dataset.id; location.hash = 'sessions'; renderExplorer(); };
+    tr.addEventListener('click', go); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+}
+/** A small bar chart of daily values inside the n-th KPI card: the busiest day in blue. */
+function spark(kpiId, n, daily, fmtV) {
+  const card = $(kpiId).querySelectorAll('.kpi')[n]; if (!card) return;
+  const series = densify(daily).slice(-45); if (series.length < 2) return;
+  const max = Math.max(...series.map((d) => d.n)) || 1, peak = series.findIndex((d) => d.n === max), W = 100, H = 30, bw = W / series.length;
+  const el = document.createElement('div'); el.className = 'spark';
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Spend per day, busiest ${esc(fmtV(max))} on ${esc(dateStr(series[peak].date))}">${series.map((d, i) => `<rect x="${(i * bw + bw * 0.15).toFixed(2)}" y="${(H - Math.max(d.n ? 1.5 : 0, (d.n / max) * H)).toFixed(2)}" width="${(bw * 0.7).toFixed(2)}" height="${Math.max(d.n ? 1.5 : 0, (d.n / max) * H).toFixed(2)}" rx="0.6" class="${i === peak ? 'pk' : ''}" data-i="${i}"/>`).join('')}</svg><a href="#cost">Per day ↗</a>`;
+  card.append(el);
+  const svg = el.querySelector('svg');
+  svg.addEventListener('pointermove', (e) => { const r = e.target.closest('rect'); if (!r) return hideTip(); const d = series[Number(r.dataset.i)]; showTip(e.clientX, e.clientY, dateStr(d.date), [[fmtV(d.n), ' spent']]); });
+  svg.addEventListener('pointerleave', hideTip);
 }
 
 /* ---- sessions ---- */
@@ -1514,6 +1675,7 @@ function renderExplorer() {
 }
 
 let TASKS = [];
+const taskLabel = (id) => (TASKS.find((t) => t.id === id) || {}).label || id || '—';
 function renderDetail(s) {
   const list = (m, n = 6, lab = (k) => k) => topN(m, n).map(([k, v]) => `${esc(lab(k))} ×${v}`).join(', ') || '—';
   const sig = s.signals, c = s.context, ctxTotal = sum(c.sources);
@@ -1547,7 +1709,7 @@ let keepSession = null;
 
 /* ---- section rail ---- */
 /* ---- pages: #home, #cost, … or any element id, which opens the page that holds it ---- */
-const PAGES = ['home', 'review', 'work', 'cost', 'setup', 'habits', 'sessions', 'digest'];
+const PAGES = ['home', 'review', 'work', 'cost', 'context', 'output', 'setup', 'habits', 'sessions', 'digest'];
 function route() {
   const id = decodeURIComponent(location.hash.slice(1)) || 'home';
   const el = !PAGES.includes(id) && document.getElementById(id);
@@ -1684,7 +1846,7 @@ function areasOf(a) {
   const judge = (list) => (sessions < MIN_SESSIONS ? list.map((x) => ({ ...x, state: 'thin' })) : list);
   return judge([
     { id: 'cost', name: 'Cost', page: 'cost', state: tv('costPerSession'), frac: null, v: perSession != null ? money(perSession) : '—', s: perSession != null ? 'recorded spend per session' : 'no cost recorded' },
-    { id: 'context', name: 'Context', page: 'cost', state: under == null ? 'none' : under < 0.5 ? 'act' : under < 0.75 ? 'watch' : 'good', frac: under, v: under == null ? '—' : rate(under), s: 'of turns under 150k tokens' },
+    { id: 'context', name: 'Context', page: 'context', state: under == null ? 'none' : under < 0.5 ? 'act' : under < 0.75 ? 'watch' : 'good', frac: under, v: under == null ? '—' : rate(under), s: 'of turns under 150k tokens' },
     { id: 'reliability', name: 'Reliability', page: 'work', state: fails == null ? 'none' : fails > 0.1 ? 'act' : fails > 0.05 ? 'watch' : 'good', frac: fails == null ? null : 1 - fails, v: fails == null ? '—' : rate(1 - fails), s: 'of tool calls succeed' },
     { id: 'prompting', name: 'Prompting', page: 'habits', state: !ctxPrac || !ctxPrac.sessions ? 'none' : ctxPrac.share < 0.25 ? 'act' : ctxPrac.share < 0.5 ? 'watch' : 'good', frac: ctxPrac && ctxPrac.sessions ? ctxPrac.share : null, v: ctxPrac && ctxPrac.sessions ? rate(ctxPrac.share) : '—', s: 'of openings give context' },
     { id: 'setup', name: 'Setup', page: 'setup', state: !plugins.length ? 'none' : plugins.length - usedPlugins >= 2 ? 'act' : plugins.length - usedPlugins === 1 ? 'watch' : 'good', frac: plugins.length ? usedPlugins / plugins.length : null, v: plugins.length ? `${usedPlugins} of ${plugins.length}` : '—', s: 'plugins in use' },
@@ -1738,7 +1900,7 @@ function renderHome(a) {
       <span class="body">${ar.frac != null ? `${gaugeSvg(ar.frac)}<span class="v">${numHtml(ar.v)}</span>` : `<span class="v flat">${numHtml(ar.v)}</span>`}</span><span class="s">${esc(ar.s)}</span></button>`).join('');
   $('areas').querySelectorAll('.area').forEach((b) => b.addEventListener('click', () => { PEEK = b.dataset.area; renderPeek(a); }));
   renderPeek(a);
-  lineChart('homeSpend', (a.cost && a.cost.daily) || [], (d) => d.n, usd, 'Spend');
+  spark('homeKpis', 1, (a.cost && a.cost.daily) || [], usd);
   const R = a.recommendations || [];
   const first = R.find((x) => (changeOf(a, x.id) || {}).next === 1) || R[0];
   const c1 = first ? changeOf(a, first.id) || {} : {};
@@ -1807,7 +1969,7 @@ async function load() {
     const q = query();
     const [a, ss] = await Promise.all([getJson('/api/data?' + q), getJson('/api/sessions?' + q)]);
     SESSIONS = ss.sessions || [];
-    renderPeriod(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
+    renderPeriod(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderContext(a); renderOutput(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
     renderRisk(a); renderEditing(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
     $('foot').textContent = `Generated ${new Date(a.generatedAt).toLocaleString()} from local logs. Nothing leaves this machine.`;
     st.className = 'status'; st.textContent = '';

@@ -122,6 +122,9 @@ export function rollupView(a, level = 'excerpts') {
       return { ...x, fix: { ...x.fix, content: redact(x.fix.content) } };
     }) };
   }
+  // the heaviest sessions carry titles: the same rule as a session's own title
+  if (a.contextAnalysis) r.contextAnalysis = { ...a.contextAnalysis, heaviest: a.contextAnalysis.heaviest.map((h) => ({ ...h, title: none || !h.title ? null : redact(h.title) })) };
+  if (a.costBreakdown) r.costBreakdown = { ...a.costBreakdown, byProject: a.costBreakdown.byProject.map((x) => ({ ...x, key: projectName(x.key, level), name: projectName(x.name, level) })), priciest: a.costBreakdown.priciest.map((x) => ({ ...x, title: none || !x.title ? null : redact(x.title) })) };
   r.workflows = (a.workflows || []).map((w) => ({ ...w, steps: w.steps.map((c) => commandName(c, level)) }));
   r.projects = mapKeys(a.projects, (p) => projectName(p, level));
   r.sessions = { ...a.sessions, longest: a.sessions.longest.map((x) => ({ ...x, proj: projectName(x.proj, level) })) };

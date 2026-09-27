@@ -69,7 +69,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, rangeWindow, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket, TREND_MIN_SESSIONS, unitOf } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, summarizeContext, summarizeOutput, summarizeCost, comparePeriods, periodWindows, rangeWindow, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket, TREND_MIN_SESSIONS, unitOf } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -254,6 +254,9 @@ export async function loadTelemetry(o) {
   if (analysis.trend && !o.split) Object.assign(analysis.trend, { unit, period: named(selected).name, previous: named(before).name });
   const config = readClaudeConfig();
   analysis.extensions = summarizeExtensions(sessions, analysis.inventory, config);
+  analysis.contextAnalysis = summarizeContext(sessions, analysis.extensions);
+  analysis.agentOutput = summarizeOutput(sessions);
+  analysis.costBreakdown = summarizeCost(sessions);
   analysis.recommendations = recommend(analysis, sessions, config).map((r) => {
     const m = analysis.trend && analysis.trend.metrics[REC_METRIC[r.id]];
     return m ? { ...r, trend: { metric: REC_METRIC[r.id], ...m } } : r;
@@ -476,7 +479,7 @@ export function analyze(data, o, sessionRecords = []) {
 // Findings — plain-language conclusions, each pointing at the section that backs it
 // ---------------------------------------------------------------------------
 export const CONTEXT_LABELS = {
-  system: 'System prompt', memory: 'CLAUDE.md / memory', toolDefs: 'Tool & agent listings', skills: 'Skill instructions',
+  unlogged: 'System prompt & built-in tools (not logged)', system: 'System prompt', memory: 'CLAUDE.md / memory', toolDefs: 'Tool & agent listings', skills: 'Skill instructions',
   hooks: 'Hook output', reminders: 'Reminders & status', userText: 'Your prompts', files: 'Attached files',
   toolInput: 'Tool call arguments', toolOutput: 'Tool results', reasoning: 'Reasoning', assistantText: 'Agent replies',
 };
@@ -508,8 +511,8 @@ function deriveFindings(a, sessions) {
     const outTotal = sum(cb.toolOutputByTool);
     const browser = out.filter(([name]) => toolBucket(name) === 'browser').reduce((x, [, c]) => x + c, 0);
     const [topTool, topOut] = out[0] || ['', 0];
-    F.push({ id: 'context-source', source: (CONTEXT_LABELS[k] || k).toLowerCase(), level: v / srcTotal >= 0.4 ? 'attention' : 'info', section: 'tokens',
-      title: `${CONTEXT_LABELS[k] || k}: ${pct(v / srcTotal)}% of what fills your context window.`,
+    F.push({ id: 'context-source', source: (CONTEXT_LABELS[k] || k).toLowerCase(), level: v / srcTotal >= 0.4 ? 'attention' : 'info', section: 'context',
+      title: `${CONTEXT_LABELS[k] || k}: ${pct(v / srcTotal)}% of the context your setup and work add.`,
       detail: k === 'toolOutput' && outTotal
         ? (browser / outTotal >= 0.25 ? `Browser tools (screenshots, page reads) produce ${pct(browser / outTotal)}% of those results.` : `${prettyTool(topTool)} produces the most (${pct(topOut / outTotal)}%).`)
         : 'Estimated from logged content, main conversation only.' });
@@ -517,7 +520,7 @@ function deriveFindings(a, sessions) {
 
   const cx = a.context || {};
   if (cx.turns && cx.highTurns / cx.turns >= 0.1) {
-    F.push({ id: 'context-pressure', level: 'attention', section: 'tokens',
+    F.push({ id: 'context-pressure', level: 'attention', section: 'context',
       title: `${pct(cx.highTurns / cx.turns)}% of agent turns ran with more than 150k tokens in context.`,
       detail: `Peak ${fmtK(cx.max)} tokens${cb.compactions ? `; the context was compacted ${cb.compactions} time${cb.compactions === 1 ? '' : 's'}` : ''}. Every such turn re-sends that whole context.` });
   }
