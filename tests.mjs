@@ -11,53 +11,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { writeFixtures } from './fixtures.mjs';
 
-// Point the adapters at a throwaway HOME (must be set before importing agents.mjs).
-const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-habits-fixtures-'));
-process.env.CC_HABITS_HOME = HOME;
+// Point the adapters at a throwaway HOME filled with real-shaped fixtures (fixtures.mjs).
+const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-fixtures-'));
+process.env.AGENT_RETRO_HOME = HOME;
+writeFixtures(HOME);
 
-function write(rel, lines) {
-  const p = path.join(HOME, rel);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, Array.isArray(lines) ? lines.join('\n') + '\n' : lines);
-}
-
-// --- fixtures ---------------------------------------------------------------
-write('.pi/agent/sessions/demo/s1.jsonl', [
-  JSON.stringify({ type: 'session', version: 1, id: 'pi-1', timestamp: '2026-01-01T10:00:00Z', cwd: '/Users/x/workspace/demo' }),
-  JSON.stringify({ type: 'message', id: 'm1', timestamp: '2026-01-01T10:00:05Z', message: { role: 'user', content: [{ type: 'text', text: 'hello world' }] } }),
-  JSON.stringify({ type: 'message', id: 'm2', timestamp: '2026-01-01T10:00:09Z', message: { role: 'assistant', content: [{ type: 'text', text: 'hi there' }, { type: 'toolCall', name: 'read_file', id: 't1' }], usage: { input: 100, output: 20, cacheRead: 300, cacheWrite: 0, reasoning: 5, cost: { total: 0.0012 } } } }),
-  JSON.stringify({ type: 'message', id: 'm3', timestamp: '2026-01-01T10:00:10Z', message: { role: 'toolResult', toolName: 'read_file', content: 'file body' } }),
-]);
-
-write('.codex/sessions/2026/01/01/rollout-x.jsonl', [
-  JSON.stringify({ timestamp: '2026-01-02T10:00:00Z', type: 'session_meta', payload: { session_id: 'cx-1', cwd: '/Users/x/workspace/codexdemo' } }),
-  JSON.stringify({ timestamp: '2026-01-02T10:00:05Z', type: 'event_msg', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'add a button' }] } }),
-  JSON.stringify({ timestamp: '2026-01-02T10:00:09Z', type: 'event_msg', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] } }),
-  JSON.stringify({ timestamp: '2026-01-02T10:00:10Z', type: 'event_msg', payload: { type: 'function_call', name: 'shell', arguments: '{}' } }),
-  JSON.stringify({ timestamp: '2026-01-02T10:00:11Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 5000, cached_input_tokens: 4000, output_tokens: 100, reasoning_output_tokens: 40 }, last_token_usage: { input_tokens: 1200 } } } }),
-]);
-
-write('.continue/sessions/sess-1.json', JSON.stringify({
-  sessionId: 'sess-1', title: 't', workspaceDirectory: '/Users/x/workspace/continuedemo',
-  history: [
-    { message: { role: 'user', content: 'do the thing' } },
-    { message: { role: 'assistant', content: [{ type: 'text', text: 'ok done' }] } },
-  ],
-}));
-
-write('.local/share/opencode/storage/session/g1/ses_x.json', JSON.stringify({ id: 'ses_x', directory: '/Users/x/workspace/ocdemo', title: 't' }));
-write('.local/share/opencode/storage/message/ses_x/m1.json', JSON.stringify({ id: 'm1', sessionID: 'ses_x', role: 'user', time: { created: 1767225600000 } }));
-write('.local/share/opencode/storage/message/ses_x/m2.json', JSON.stringify({ id: 'm2', sessionID: 'ses_x', role: 'assistant', time: { created: 1767225601000 } }));
-write('.local/share/opencode/storage/part/m1/p1.json', JSON.stringify({ id: 'p1', messageID: 'm1', sessionID: 'ses_x', type: 'text', text: 'hello opencode' }));
-write('.local/share/opencode/storage/part/m2/p2.json', JSON.stringify({ id: 'p2', messageID: 'm2', sessionID: 'ses_x', type: 'text', text: 'hi from assistant' }));
-
-// A deliberately novel/renamed schema (simulates an upstream format change).
-write('.codex/sessions/2026/02/02/rollout-novel.jsonl', [
-  JSON.stringify({ when: '2026-02-02T00:00:00Z', author: 'human', body: 'novel schema prompt' }),
-]);
-
-const { collectFor, collectGeneric, harvestEvents, adapterHealth } = await import('./agents.mjs');
+const { collectFor, collectGeneric, harvestEvents, adapterHealth, collectClaude, loadEvents } = await import('./agents.mjs');
+const { buildSessions, commandHead, TASK_IDS } = await import('./sessions.mjs');
+const { redact, buildBundle, sessionView } = await import('./telemetry.mjs');
+const { loadTelemetry } = await import('./agent-retro.mjs');
 
 const promptsOf = (ev) => ev.filter((e) => e.role === 'user' || e.role === 'assistant');
 const toolsOf = (ev) => ev.filter((e) => e.role === 'tool');
@@ -67,7 +31,7 @@ test('pi: messages, tools, and project attribution', () => {
   const ev = collectFor('pi', {});
   const p = promptsOf(ev);
   assert.equal(p.length, 2);
-  assert.equal(toolsOf(ev).length, 2);
+  assert.equal(toolsOf(ev).length, 1); // the toolResult is a result, not a second call
   assert.equal(p[0].text, 'hello world');
   assert.equal(p[0].project, 'demo');
   assert.equal(p[1].text, 'hi there');
@@ -137,4 +101,417 @@ test('codex: cumulative usage collapses to a session total', () => {
 test('per-adapter isolation: pi fixture does not leak into codex', () => {
   const codex = promptsOf(collectFor('codex', {}));
   assert.ok(!codex.some((e) => e.text === 'hello world'));
+});
+
+// --- Claude adapter + session telemetry -------------------------------------
+const bySession = async () => {
+  const { sessions } = await loadTelemetry({ dirs: [], top: 15, history: false });
+  return Object.fromEntries(sessions.map((x) => [x.id, x]));
+};
+
+test('claude: every event carries its sessionId; subagent work joins the parent session', async () => {
+  const { events, files } = await collectClaude({});
+  assert.equal(files.length, 4);
+  assert.ok(events.every((e) => e.sessionId));
+  const side = events.filter((e) => e.sidechain);
+  assert.ok(side.length >= 2 && side.every((e) => e.sessionId === 'rev-1'));
+  assert.ok(events.some((e) => e.role === 'tool' && e.detail === 'gh pr diff 42'));
+});
+
+test('sessions: subagent prompts are never human turns', async () => {
+  const s = (await bySession())['rev-1'];
+  assert.equal(s.turns.human, 2);
+  assert.equal(s.turns.pushback, 1);
+  assert.equal(s.subagents.runs, 1);
+  assert.equal(s.subagents.toolCalls, 1);
+  assert.equal(s.subagents.types['code-reviewer'], 1);
+});
+
+test('sessions: tools, errors, shell heads, cost and title', async () => {
+  const s = (await bySession())['rev-1'];
+  assert.equal(s.tools.errors, 1);
+  assert.equal(s.tools.shell['gh pr'], 1);
+  assert.equal(s.tools.shell['git diff'], 1, 'cd prefix is skipped');
+  assert.equal(s.skills['code-review'], 1);
+  assert.equal(s.costUsd, 0.42);
+  assert.equal(s.tokens.cacheRead, 4900); // 4 main-thread turns + the subagent's turn
+  assert.equal(s.branch, 'main');
+  assert.equal(s.durationMin, 9);
+});
+
+test('sessions: fix loops and file edits', async () => {
+  const s = (await bySession())['dbg-1'];
+  assert.equal(s.signals.testRuns, 2);
+  assert.equal(s.signals.fixLoops, 1);
+  assert.equal(s.files.edited, 1);
+  const f = (await bySession())['feat-1'];
+  assert.equal(f.turns.ack, 1);
+  assert.equal(f.files.edited, 2);
+});
+
+test('context: estimated sources from the main thread only, compactions, api errors', async () => {
+  const d = (await bySession())['dbg-1'];
+  assert.equal(d.context.estimated, true);
+  assert.equal(d.context.sources.memory, 200, 'CLAUDE.md: 800 chars ≈ 200 tokens');
+  assert.equal(d.context.toolOutputByTool.Read, 1000);
+  assert.equal(d.context.compactions, 1);
+  assert.equal(d.context.compactPreTokens, 180000);
+  assert.equal(d.context.apiErrors, 1);
+  const r = (await bySession())['rev-1'];
+  assert.equal(r.context.sources.reasoning, undefined, 'subagent thinking is in its own window');
+});
+
+test('subagents: per-type runs, tools and tokens from meta.json', async () => {
+  const t = (await bySession())['rev-1'].subagents.byType['code-reviewer'];
+  assert.deepEqual(t, { runs: 1, toolCalls: 1, errors: 0, tokens: 945, outputTokens: 40 });
+});
+
+test('risk: sensitive files, destructive commands, error bursts', async () => {
+  const d = (await bySession())['dbg-1'];
+  assert.equal(d.risk.sensitiveAccess, 1);
+  assert.equal(d.risk.destructiveCommands, 1, 'rm -rf dist is routine; rm -rf src/legacy is not');
+  assert.equal(d.risk.maxErrorsPerTurn, 3);
+  const { isDestructive, isSensitive } = await import('./sessions.mjs');
+  assert.equal(isDestructive('git push --force origin main'), true);
+  assert.equal(isDestructive('rm -rf node_modules .next /tmp/x'), false);
+  assert.equal(isSensitive("python3 - <<'EOF'\nx = '.env'\nEOF"), false, 'heredoc bodies are payload, not access');
+});
+
+test('task labels: review, debugging, feature', async () => {
+  const s = await bySession();
+  assert.equal(s['rev-1'].task.primary, 'code-review');
+  assert.equal(s['dbg-1'].task.primary, 'debugging');
+  assert.equal(s['feat-1'].task.primary, 'feature');
+  for (const x of Object.values(s)) assert.ok(x.task.confidence > 0 && x.task.confidence <= 1);
+});
+
+test('commandHead normalizes shell commands', () => {
+  assert.equal(commandHead('cd /repo && npm run build -- --prod'), 'npm run build');
+  assert.equal(commandHead('bash -lc "pytest -q tests/"'), 'pytest');
+  assert.equal(commandHead('FOO=1 npx vitest run'), 'vitest');
+  assert.equal(commandHead('python3 -m http.server'), 'python -m http.server');
+  assert.equal(commandHead('gh pr view 12 --json title'), 'gh pr');
+});
+
+test('rollup: per-task profile and subagent prompts excluded from human volume', async () => {
+  const { analysis } = await loadTelemetry({ dirs: [], top: 15, history: false });
+  assert.equal(analysis.volume.prompts, 6); // 2 per session; the subagent prompt is excluded
+  assert.equal(analysis.tasks['code-review'].sessions, 1);
+  assert.equal(analysis.tasks['code-review'].totalCost, 0.42);
+  assert.deepEqual(analysis.tasks['debugging'].topShell[0], ['npm test', 2]);
+});
+
+test('loadEvents: days/project filters apply to every agent alike', async () => {
+  const all = await loadEvents({ allAgents: true });
+  assert.ok(all.events.some((e) => e.agent === 'pi') && all.events.some((e) => e.agent === 'claude'));
+  const only = await loadEvents({ allAgents: true, project: 'codexdemo' });
+  assert.ok(only.events.length && only.events.every((e) => e.project === 'codexdemo'));
+});
+
+// --- recommendations -------------------------------------------------------------
+test('recommendations: unused plugin, personal skill and MCP server, with fixes for this config', async () => {
+  const { analysis } = await loadTelemetry({ dirs: [], top: 15, history: false });
+  const by = Object.fromEntries(analysis.recommendations.map((r) => [r.id, r]));
+  assert.deepEqual(JSON.parse(by['unused-plugins'].fix.content), { enabledPlugins: { 'idle-plugin@market': false } }, 'used-plugin stays enabled');
+  assert.match(by['unused-skills'].fix.content, /mv ~\/\.claude\/skills\/my-old-skill ~\/\.claude\/skills-parked\//);
+  assert.ok(!by['unused-skills'].evidence.includes('code-review'), 'code-review was used (Skill tool)');
+  assert.equal(by['unused-mcp'].fix.content, 'claude mcp remove dusty-server -s user');
+  assert.deepEqual(JSON.parse(by.secrets.fix.content).permissions.deny[0], 'Read(./.env)');
+  assert.deepEqual(analysis.recommendations.map((r) => r.level), [...analysis.recommendations.map((r) => r.level)].sort((a, b) => ['high', 'medium', 'low'].indexOf(a) - ['high', 'medium', 'low'].indexOf(b)));
+});
+
+test('extensions: plugins, skills, MCP servers and hooks from session logs', async () => {
+  const { analysis } = await loadTelemetry({ dirs: [], top: 15, history: false });
+  const E = analysis.extensions;
+  const by = (list, key, v) => list.find((x) => x[key] === v);
+  assert.equal(by(E.plugins, 'name', 'idle-plugin').verdict, 'unused');
+  assert.equal(by(E.plugins, 'name', 'used-plugin').enabledKey, 'used-plugin@market');
+  const gamma = by(E.skills, 'name', 'used-plugin:gamma');
+  assert.equal(gamma.uses, 1, 'the Skill call and its load count once');
+  assert.equal(gamma.tokensPerLoad, Math.round(('Base directory for this skill: /Users/x/.claude/plugins/cache/market/used-plugin/1.0.0/skills/gamma\n'.length + 3996) / 4));
+  const busy = by(E.mcpServers, 'name', 'busy-srv');
+  assert.deepEqual([busy.calls, busy.errors, busy.topError, busy.verdict], [2, 1, 'timeout', 'used']);
+  assert.equal(by(E.mcpServers, 'name', 'dusty-server').source, 'user');
+  const hook = E.hooks[0];
+  assert.deepEqual([hook.name, hook.runs, hook.sessions, hook.p90Ms, hook.tokensPerSession], ['SessionStart', 3, 3, 1200, 2000]);
+  const ids = analysis.recommendations.map((r) => r.id);
+  assert.ok(ids.includes('heavy-hooks'));
+});
+
+test('playbooks: missing practices for a recurring task become a workflow command', async () => {
+  const { buildSessions, summarizeTasks } = await import('./sessions.mjs');
+  const { recommend } = await import('./recommend.mjs');
+  const ev = [];
+  for (let i = 0; i < 3; i++) {
+    const sid = `cr${i}`, ts = Date.parse(`2026-04-0${i + 1}T10:00:00Z`);
+    ev.push({ agent: 'x', sessionId: sid, ts, role: 'user', text: 'please do a code review of this PR, reviewer checklist' });
+    ev.push({ agent: 'x', sessionId: sid, ts: ts + 1000, role: 'tool', toolName: 'Read', detail: 'src/a.ts' });
+    if (i === 0) ev.push({ agent: 'x', sessionId: sid, ts: ts + 2000, role: 'tool', toolName: 'Bash', detail: 'npm test' });
+  }
+  const sessions = buildSessions(ev);
+  const cfg = { enabledPlugins: {}, permissions: {}, userMcp: {}, projectMcp: {}, userSkills: new Set() };
+  const r = recommend({ tasks: summarizeTasks(sessions), context: {}, contextBreakdown: {}, risk: {} }, sessions, cfg).find((x) => x.id === 'playbook-code-review');
+  assert.ok(r, 'fires for 3 code-review sessions');
+  assert.equal(r.task, 'code-review');
+  assert.match(r.action, /fetch the change with a tool/);
+  assert.match(r.evidence, /Run the tests as part of the review: 33% of sessions/);
+  assert.equal(r.fix.target, '~/.claude/commands/code-review.md');
+  assert.match(r.fix.content, /gh pr diff \$ARGUMENTS/);
+});
+
+test('analyzePrompt: shots, techniques, vagueness; acks are not task prompts', async () => {
+  const { analyzePrompt } = await import('./prompts.mjs');
+  assert.equal(analyzePrompt('continue'), null);
+  assert.equal(analyzePrompt('yes do it'), null);
+  const zero = analyzePrompt('add a dark mode toggle to src/settings/Page.tsx, keep the existing layout');
+  assert.equal(zero.shots, 'zero-shot');
+  assert.ok(zero.techniques.has('context') && zero.techniques.has('constraints'));
+  assert.equal(analyzePrompt('rename the helpers, for example getUser → fetchUser').shots, 'one-shot');
+  assert.equal(analyzePrompt('write tests. For example: empty input. Another example: unicode names. Input: [] Output: 0').shots, 'few-shot');
+  const brief = analyzePrompt('You are a senior reviewer. Review the diff step by step.\n- check error handling\n- check naming\nReturn the findings as a table so that I can triage them, because we ship Friday. Done when every file is covered.');
+  for (const t of ['role', 'step-by-step', 'structured', 'output-format', 'goal', 'why']) assert.ok(brief.techniques.has(t), t);
+  assert.equal(analyzePrompt('fix it please, make it better').vague, true);
+  assert.equal(analyzePrompt('fix the TypeError in src/cart.ts line 42').vague, false);
+});
+
+test('summarizePrompts: adoption and with/without outcomes on opening prompts', async () => {
+  const { summarizePrompts } = await import('./prompts.mjs');
+  const S = (first, human, pushback = 0) => ({ _prompts: [first, ...Array(human - 1).fill('and another change please')], turns: { human, pushback } });
+  const sessions = [
+    S('fix the crash in src/cart.ts line 42', 2), S('update api/users.ts to paginate', 1), S('see error: exit code 1 in build.sh', 2),
+    S('make it better please', 6, 1), S('improve the page now', 5, 1), S('do the thing we discussed', 7),
+  ];
+  const P = summarizePrompts(sessions);
+  const ctx = P.practices.find((p) => p.id === 'context');
+  assert.equal(ctx.share, 0.5);
+  assert.deepEqual([ctx.outcome.with.medianFollowUps, ctx.outcome.without.medianFollowUps], [1, 5]);
+  assert.equal(ctx.outcome.helps, true);
+  assert.equal(P.practices.find((p) => p.id === 'goal').outcome, null, 'no sessions with a goal: nothing to compare');
+  assert.ok(P.vagueExamples.length >= 2);
+  const { recommend } = await import('./recommend.mjs');
+  const cfg = { enabledPlugins: {}, permissions: {}, userMcp: {}, projectMcp: {}, userSkills: new Set() };
+  assert.equal(recommend({ prompting: P, context: {}, contextBreakdown: {}, risk: {} }, [], cfg).some((r) => r.id === 'prompt-practices'), false, 'context is used in 50%, so no nudge');
+  const P2 = summarizePrompts([...sessions.slice(0, 3), ...Array(8).fill(0).map(() => S('please make the page nicer', 6, 1))]);
+  const r = recommend({ prompting: P2, context: {}, contextBreakdown: {}, risk: {} }, [], cfg).find((x) => x.id === 'prompt-practices');
+  assert.ok(r, 'fires when context is rare and helps');
+  assert.match(r.evidence, /Give context: in 27% of your opening prompts/);
+  assert.equal(r.fix.target, '~/.claude/commands/brief.md');
+});
+
+test('recommendations: nothing fires on an empty history', async () => {
+  const { recommend } = await import('./recommend.mjs');
+  const empty = { inventory: { sessionsMeasured: 0, skills: {}, mcpServers: {} }, extensions: { plugins: [], skills: [], mcpServers: [], hooks: [], commands: [] }, context: {}, contextBreakdown: {}, risk: {} };
+  assert.deepEqual(recommend(empty, [], { enabledPlugins: {}, permissions: {}, userMcp: {}, projectMcp: {}, userSkills: new Set() }), []);
+});
+
+// --- errors, time, labels, trends, sequences ----------------------------------
+test('errorClass: failures by cause; rejections and guard blocks are not failures', async () => {
+  const { errorClass } = await import('./sessions.mjs');
+  assert.equal(errorClass("The user doesn't want to proceed with this tool use."), 'rejected');
+  assert.equal(errorClass('Adding a new package is blocked. Every dependency is code'), 'blocked');
+  assert.equal(errorClass('Error capturing screenshot: Script injection timed out after 10s'), 'timeout');
+  assert.equal(errorClass('MCP error -32602: Input validation error: Invalid arguments'), 'invalid-input');
+  assert.equal(errorClass('Port 4321 is in use by "node" (PID 1)'), 'environment');
+  assert.equal(errorClass('Exit code 1\nFAIL src/a.test.ts'), 'command-failed');
+  assert.equal(errorClass(''), 'unknown');
+});
+
+test('time: agent working time, your reply time, and away gaps', async () => {
+  const d = (await bySession())['dbg-1'];
+  assert.deepEqual(d.time, { agentMinutes: 4, waitMinutes: 1, awayMinutes: 0, medianResponseSec: 60 });
+  const { buildSessions } = await import('./sessions.mjs');
+  const T = (m) => Date.parse('2026-03-01T10:00:00Z') + m * 60000;
+  const [s] = buildSessions([
+    { agent: 'x', sessionId: 'r', ts: T(0), role: 'user', text: 'fix the flaky build please' },
+    { agent: 'x', sessionId: 'r', ts: T(2), role: 'assistant' },
+    { agent: 'x', sessionId: 'r', ts: T(2 + 60 * 24), role: 'assistant' }, // resumed a day later
+    { agent: 'x', sessionId: 'r', ts: T(3 + 60 * 24), role: 'tool', toolName: 'Bash', detail: 'npm test' },
+    { agent: 'x', sessionId: 'r', ts: T(3 + 60 * 24), role: 'tool_error', toolName: 'Bash', text: "The user doesn't want to proceed" },
+  ]);
+  assert.equal(s.time.agentMinutes, 3, 'the day-long gap is away, not work');
+  assert.equal(s.time.awayMinutes, 60 * 24);
+  assert.equal(s.tools.errors, 0);
+  assert.equal(s.tools.rejected, 1);
+});
+
+test('labels: a manual label overrides the rules and keeps what they said', async () => {
+  const { buildSessions } = await import('./sessions.mjs');
+  const { events } = await loadEvents({});
+  const feat = buildSessions(events, { labels: { 'feat-1': 'ui-design' } }).find((x) => x.id === 'feat-1');
+  assert.equal(feat.task.primary, 'ui-design');
+  assert.equal(feat.task.source, 'manual');
+  assert.equal(feat.task.rulePrimary, 'feature');
+  const { writeLabel, readLabels } = await import('./agent-retro.mjs');
+  writeLabel('feat-1', 'docs');
+  assert.equal(readLabels()['feat-1'], 'docs');
+  assert.throws(() => writeLabel('feat-1', 'not-a-task'));
+  writeLabel('feat-1', null);
+  assert.equal(readLabels()['feat-1'], undefined);
+});
+
+test('comparePeriods: before/after split shows which way each metric moved', async () => {
+  const { buildSessions, comparePeriods } = await import('./sessions.mjs');
+  const ev = [];
+  for (let i = 0; i < 6; i++) {
+    const ts = Date.parse(`2026-0${i < 3 ? 1 : 3}-0${i + 1}T10:00:00Z`);
+    ev.push({ agent: 'x', sessionId: `p${i}`, ts, role: 'user', text: 'implement the settings page' });
+    ev.push({ agent: 'x', sessionId: `p${i}`, ts: ts + 1000, role: 'assistant' });
+    if (i < 3) ev.push({ agent: 'x', sessionId: `p${i}`, ts: ts + 2000, role: 'user', text: 'continue' });
+  }
+  const t = comparePeriods(buildSessions(ev), { split: Date.parse('2026-02-01') });
+  assert.deepEqual(t.sessions, { before: 3, after: 3 });
+  assert.equal(t.metrics.ackRate.before, 0.5);
+  assert.equal(t.metrics.ackRate.after, 0);
+  assert.equal(t.metrics.ackRate.verdict, 'better');
+  assert.equal(comparePeriods(buildSessions(ev.slice(0, 4))), null, 'too few sessions to compare');
+});
+
+test('mineWorkflows: repeated command runs across sessions, exploration-only runs skipped', async () => {
+  const { mineWorkflows } = await import('./sessions.mjs');
+  const S = (heads) => ({ _shellHeads: heads });
+  const w = mineWorkflows([
+    S(['git status', 'npm test', 'npm test', 'git add', 'git commit']),
+    S(['ls', 'git status', 'npm test', 'git add', 'git commit', 'git push']),
+    S(['git status', 'npm test', 'git add', 'git commit']),
+    S(['grep', 'cat', 'ls', 'grep']), S(['grep', 'cat', 'ls']), S(['grep', 'cat', 'ls']),
+  ]);
+  assert.deepEqual(w[0], { steps: ['git status', 'npm test', 'git add', 'git commit'], sessions: 3, runs: 3 });
+  assert.ok(!w.some((x) => x.steps.includes('grep')));
+});
+
+// --- redaction + text levels --------------------------------------------------
+test('redact: secrets, emails, home paths', () => {
+  const r = redact('token=abc123secret key sk-ABCDEFGHIJKLMNOPQRSTUV mail a@b.co at /Users/x/proj and ghp_abcdefghijklmnopqrstuvwxyz0123');
+  assert.ok(!/abc123secret|sk-ABC|a@b\.co|\/Users\/x|ghp_/.test(r), r);
+  assert.match(r, /~\/proj/);
+  assert.equal(redact('src/components/Button.tsx'), 'src/components/Button.tsx');
+});
+
+test('text levels: none drops text, excerpts clip, full keeps all', async () => {
+  const s = (await bySession())['rev-1'];
+  const none = sessionView(s, 'none');
+  assert.equal(none.title, null);
+  assert.deepEqual(none.text, { level: 'none' });
+  assert.ok(!Object.keys(none).some((k) => k.startsWith('_')));
+  const ex = sessionView(s, 'excerpts');
+  assert.equal(ex.text.prompts.length, 2);
+  assert.ok(!/abc123secret|a@b\.co/.test(ex.text.prompts[0]));
+  assert.equal(ex.title, 'Review PR 42 at ~/secret-proj');
+  assert.throws(() => sessionView(s, 'everything'));
+});
+
+// --- schema contract ------------------------------------------------------------
+const SCHEMA = JSON.parse(fs.readFileSync(new URL('./schema/telemetry.schema.json', import.meta.url), 'utf8'));
+/** Minimal JSON Schema subset validator (type, const, enum, required, properties, additionalProperties, items, prefixItems, propertyNames, minimum, maximum, $ref). */
+function validate(v, schema, at = '$', errs = []) {
+  if (schema.$ref) return validate(v, SCHEMA.$defs[schema.$ref.split('/').pop()], at, errs);
+  const typeOf = (x) => (x === null ? 'null' : Array.isArray(x) ? 'array' : typeof x);
+  if (schema.type) { const ts = [].concat(schema.type); if (!ts.includes(typeOf(v))) { errs.push(`${at}: expected ${ts} got ${typeOf(v)}`); return errs; } }
+  if ('const' in schema && v !== schema.const) errs.push(`${at}: expected ${schema.const}`);
+  if (schema.enum && !schema.enum.includes(v)) errs.push(`${at}: ${v} not in enum`);
+  if (schema.minimum != null && v < schema.minimum) errs.push(`${at}: < minimum`);
+  if (schema.maximum != null && v > schema.maximum) errs.push(`${at}: > maximum`);
+  if (typeOf(v) === 'object') {
+    for (const r of schema.required || []) if (!(r in v)) errs.push(`${at}: missing ${r}`);
+    for (const [k, x] of Object.entries(v)) {
+      if (schema.propertyNames) validate(k, schema.propertyNames, `${at}{${k}}`, errs);
+      if (schema.properties && schema.properties[k]) validate(x, schema.properties[k], `${at}.${k}`, errs);
+      else if (schema.additionalProperties === false) errs.push(`${at}: unexpected ${k}`);
+      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') validate(x, schema.additionalProperties, `${at}.${k}`, errs);
+    }
+  }
+  if (typeOf(v) === 'array') v.forEach((x, i) => {
+    if (schema.prefixItems && i < schema.prefixItems.length) validate(x, schema.prefixItems[i], `${at}[${i}]`, errs);
+    else if (schema.items) validate(x, schema.items, `${at}[${i}]`, errs);
+  });
+  return errs;
+}
+
+test('schema: task enum matches the TASKS table', () => {
+  assert.deepEqual([...SCHEMA.$defs.taskId.enum].sort(), [...TASK_IDS].sort());
+});
+
+test('schema: export bundle validates at every text level', async () => {
+  const t = await loadTelemetry({ dirs: [], top: 15, history: false });
+  for (const text of ['none', 'excerpts', 'full']) {
+    const b = buildBundle(t, { text });
+    assert.deepEqual(validate(b.telemetry, SCHEMA.$defs.Telemetry), []);
+    for (const s of b.sessions) assert.deepEqual(validate(s, SCHEMA.$defs.Session), [], s.id);
+  }
+});
+
+// --- CLI + MCP, as real child processes ----------------------------------------
+const { spawnSync, spawn } = await import('node:child_process');
+const CLI = new URL('./agent-retro.mjs', import.meta.url).pathname;
+const env = { ...process.env, AGENT_RETRO_HOME: HOME };
+
+test('cli: --export writes a valid bundle and nothing sensitive at --text none', () => {
+  const out = path.join(HOME, 'export');
+  const r = spawnSync(process.execPath, [CLI, '--export', out, '--text', 'none'], { env, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const tel = JSON.parse(fs.readFileSync(path.join(out, 'telemetry.json'), 'utf8'));
+  assert.deepEqual(validate(tel, SCHEMA.$defs.Telemetry), []);
+  const raw = fs.readFileSync(path.join(out, 'sessions.jsonl'), 'utf8');
+  const lines = raw.trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines.length, 3);
+  assert.ok(!/review this PR|dark mode|secret-proj|abc123secret|"rev"/.test(raw + JSON.stringify(tel)));
+  assert.deepEqual(tel.rollup.prompting.vagueExamples, [], 'no prompt text at level none');
+  assert.ok(lines.every((l) => /^project-[0-9a-f]{6}$/.test(l.project) && /^branch-[0-9a-f]{6}$/.test(l.branch)), 'project and branch are pseudonymized');
+  assert.equal(new Set(lines.map((l) => l.project)).size, 1, 'pseudonyms are stable');
+  assert.ok(lines.find((l) => l.id === 'rev-1').tools.shell['gh pr'], 'well-known commands survive');
+  const bad = spawnSync(process.execPath, [CLI, '--sessions', '--text', 'bogus'], { env, encoding: 'utf8' });
+  assert.equal(bad.status, 2);
+});
+
+test('mcp: initialize, tools/list, tools/call round-trip over stdio', async () => {
+  const child = spawn(process.execPath, [CLI, '--mcp'], { env, stdio: ['pipe', 'pipe', 'inherit'] });
+  const pending = new Map(); let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d; let i;
+    while ((i = buf.indexOf('\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); pending.get(m.id)?.(m); }
+  });
+  let id = 0;
+  const rpc = (method, params) => new Promise((res) => { const n = ++id; pending.set(n, res); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: n, method, params }) + '\n'); });
+  try {
+    const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } });
+    assert.equal(init.result.serverInfo.name, 'agent-retro');
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+    const list = await rpc('tools/list', {});
+    assert.deepEqual(list.result.tools.map((t) => t.name), ['get_overview', 'list_sessions', 'get_recommendations', 'get_extensions', 'get_session', 'get_task_profile']);
+    const ex = await rpc('tools/call', { name: 'get_extensions', arguments: { kind: 'hooks' } });
+    assert.equal(ex.result.structuredContent.hooks[0].name, 'SessionStart');
+    const recs = await rpc('tools/call', { name: 'get_recommendations', arguments: {} });
+    assert.ok(recs.result.structuredContent.recommendations.some((r) => r.id === 'unused-plugins'));
+    const ls = await rpc('tools/call', { name: 'list_sessions', arguments: { task: 'code-review' } });
+    assert.equal(ls.result.structuredContent.total, 1);
+    assert.equal(ls.result.structuredContent.sessions[0].id, 'rev-1');
+    const prof = await rpc('tools/call', { name: 'get_task_profile', arguments: { task: 'debugging' } });
+    assert.equal(prof.result.structuredContent.fixLoops, 1);
+    const ov = await rpc('tools/call', { name: 'get_overview', arguments: {} });
+    assert.ok(ov.result.structuredContent.tasks['feature']);
+    const miss = await rpc('tools/call', { name: 'get_session', arguments: { id: 'nope' } });
+    assert.equal(miss.result.isError, true);
+    const unknown = await rpc('bogus/method', {});
+    assert.equal(unknown.error.code, -32601);
+  } finally { child.kill(); }
+});
+
+test('cli: --label saves a correction and --label-accuracy reports agreement', () => {
+  const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { env, encoding: 'utf8' });
+  assert.equal(run('--label', 'rev-1=debugging').status, 0);
+  const acc = run('--label-accuracy');
+  assert.match(acc.stdout, /Rules agree with 0 of 1 corrected labels/);
+  assert.match(acc.stdout, /rules said code-review → debugging: 1/);
+  assert.equal(run('--label', 'rev-1=bogus').status, 2);
+  assert.equal(run('--label', 'rev-1=').status, 0);
+});
+
+test('cli: --demo runs on synthetic data and never reads the real home', () => {
+  const r = spawnSync(process.execPath, [CLI, '--demo', '--json'], { env: { ...process.env, AGENT_RETRO_HOME: '/nonexistent-home' }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const a = JSON.parse(r.stdout);
+  assert.equal(a.sessions.count, 36);
+  assert.ok(a.recommendations.some((x) => x.id === 'playbook-code-review'));
+  assert.ok(a.trend && a.extensions.hooks.length);
+  assert.match(r.stderr, /demo mode: 36 synthetic sessions/);
 });
