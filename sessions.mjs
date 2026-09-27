@@ -622,7 +622,9 @@ export function defaultPeriod(windows) {
  *  - split (ms): before = sessions starting earlier, after = the rest;
  *  - window + previous ({ from, to } each): the period against the one before it.
  */
-export function comparePeriods(sessions, { split = null, window = null, previous = null, minSessions = 3 } = {}) {
+/** Fewer sessions than this on either side and one odd session decides the verdict, so no comparison. */
+export const TREND_MIN_SESSIONS = 3;
+export function comparePeriods(sessions, { split = null, window = null, previous = null, minSessions = TREND_MIN_SESSIONS } = {}) {
   const dated = sessions.filter((s) => s.start);
   if (!dated.length || (!split && !(window && previous))) return null;
   const inside = (w) => (s) => s.start >= w.from && s.start < w.to;

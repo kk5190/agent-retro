@@ -68,7 +68,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket, TREND_MIN_SESSIONS } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -235,7 +235,7 @@ export async function loadTelemetry(o) {
   const isoDay = localDate;
   const unit = cycle ? 'cycle' : 'month';
   analysis.view = { scope: scopeWindow ? o.scope : 'all', unit, name: scopeWindow ? periodName(scopeWindow, cycle) : 'all sessions', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), sessions: sessions.length };
-  analysis.period = { unit, cycle, windows: windows.map((w) => ({ name: periodName(w, cycle), from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
+  analysis.period = { unit, cycle, windows: windows.map((w) => ({ name: periodName(w, cycle), from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null, compareMin: TREND_MIN_SESSIONS };
   analysis.trend = comparePeriods(allSessions, o.split ? { split: Date.parse(o.split) } : { window: selected, previous: before });
   if (analysis.trend && !o.split) Object.assign(analysis.trend, { unit, period: periodName(selected, cycle) });
   const config = readClaudeConfig();

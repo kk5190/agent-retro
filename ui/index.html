@@ -962,9 +962,19 @@ function renderSummary(a, sessions) {
 const VERDICT = { better: '↓ better', worse: '↑ worse', flat: '→ about the same' };
 const fmtM = (m, v) => (m.usd ? money(v) : m.share ? Math.round(v * 100) + '%' : fmtN(v));
 const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
+/** Why there is no comparison: name both periods and their session counts. */
+function noTrendReason(a) {
+  const p = a.period || {}, w = p.windows || [], min = p.compareMin || 3;
+  const i = w.findIndex((x) => x.from === p.selected);
+  const cur = w[i], prev = w[i + 1];
+  const label = (x) => (p.unit === 'month' ? x.name : `the cycle from ${dateStr(x.from)}`);
+  if (!cur) return `Needs at least ${min} sessions in a ${p.unit || 'month'} and in the one before to compare them.`;
+  if (!prev) return `Nothing to compare ${label(cur)} with: there are no sessions from the ${p.unit} before.`;
+  return `Comparing needs at least ${min} sessions in each ${p.unit}, so one unusual session cannot decide the result. ${label(cur)} has ${cur.sessions} and ${label(prev)} has ${prev.sessions}.`;
+}
 function renderTrend(a) {
   const t = a.trend;
-  if (!t) { $('trendHint').textContent = 'Needs at least 3 sessions in each of the last two 14-day periods. Keep using your agents and check back.'; $('trendTable').innerHTML = ''; return; }
+  if (!t) { $('trendHint').textContent = noTrendReason(a); $('trendTable').innerHTML = ''; return; }
   $('trendHint').textContent = `${trendWindow(t)[0].toUpperCase() + trendWindow(t).slice(1)}: ${t.sessions.before} sessions before, ${t.sessions.after} after. For a specific change, run with --split <date you made it>.`;
   $('trendTable').innerHTML = '<tr><th>Metric</th><th>Before</th><th>After</th><th>Change</th></tr>' + Object.values(t.metrics).map((m) => `<tr><td>${esc(m.label)}</td><td>${fmtM(m, m.before)}</td><td>${fmtM(m, m.after)}</td><td class="v-${m.verdict}" style="font-family:var(--body)">${VERDICT[m.verdict]}</td></tr>`).join('');
 }
