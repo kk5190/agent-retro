@@ -1,5 +1,5 @@
 /**
- * agents.mjs — multi-agent log collectors for cc-habits.
+ * agents.mjs — multi-agent log collectors for agent-retro.
  *
  * Each adapter reads a different local store and emits normalized events:
  *   { agent, sessionId, project, ts, role, text, toolName?, model? }
@@ -13,9 +13,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import zlib from 'node:zlib';
+import readline from 'node:readline';
 import { execFileSync } from 'node:child_process';
 
-const HOME = process.env.CC_HABITS_HOME || os.homedir();
+/** Resolved on each use so --demo (and tests) can point every reader at another home. */
+const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
 // ---------------------------------------------------------------------------
 // Discovery catalog (scan shows everything found, parsed or not)
@@ -38,7 +40,7 @@ export const STORES = [
 // ---------------------------------------------------------------------------
 // Shared text hygiene
 // ---------------------------------------------------------------------------
-const NOISE = [
+export const NOISE = [
   /^\s*\[Image:/, /^\s*\[Request interrupted/, /^\s*<task-notification/,
   /^\s*Base directory for this skill/, /^\s*<launch-selected-element/,
   /^\s*<command-name>/, /^\s*<command-message/, /^\s*<system-reminder/,
@@ -48,10 +50,14 @@ const NOISE = [
   /^\s*<environment_context>/, /^\s*<user_instructions>/, /^\s*<ENVIRONMENT/,
   /^\s*<permissions instructions>/, /^\s*<turn_aborted/,
   /^\s*\[Your previous response had no visible output/,
+  /^\s*<user-prompt-submit-hook/, /^\s*\[Automated/,
 ];
-const TEMPLATE = /^(you are|review\b|#|learn\b|analyz|analys|read the|implement the|fix the following|the \/|create a spec|investigate|verify that|as a |act as |your (job|task)|superpowers|i'm planning a fix)/i;
+export const TEMPLATE = /^(you are|review\b|#|learn\b|analyz|analys|read the|implement the|fix the following|the \/|create a spec|investigate|verify that|as a |act as |your (job|task)|superpowers|i'm planning a fix)/i;
 
-function classify(text) {
+/** promptSource values that represent a person typing (Claude Code). */
+export const HUMAN_SRC = ['typed', 'queued', 'suggestion_accepted', 'sdk'];
+
+export function classify(text) {
   const t = (text || '').trim();
   if (!t || NOISE.some((re) => re.test(t))) return null;
   return { text: t, template: TEMPLATE.test(t) || t.length > 800 };
@@ -68,6 +74,18 @@ function textFromContent(content) {
   }
   if (content && typeof content.text === 'string') return content.text;
   return '';
+}
+
+/** Short, human-meaningful argument of a tool call: shell command, skill, subagent, or file path. */
+export function toolDetail(input) {
+  if (typeof input === 'string') { try { input = JSON.parse(input); } catch { return undefined; } }
+  if (!input || typeof input !== 'object') return undefined;
+  const cmd = input.command != null ? input.command : input.cmd;
+  if (cmd != null) return (Array.isArray(cmd) ? cmd.join(' ') : String(cmd)).slice(0, 300);
+  if (input.skill) return String(input.skill);
+  if (input.subagent_type) return `${input.subagent_type}: ${input.description || ''}`.slice(0, 160);
+  const f = input.file_path || input.filePath || input.notebook_path || input.path;
+  return f ? String(f) : undefined;
 }
 
 function basenameOf(p) { return p ? path.basename(String(p).replace(/\/+$/, '')) : 'unknown'; }
@@ -168,7 +186,7 @@ export function harvestEvents(record, ctx = {}) {
     : (record.message && Array.isArray(record.message.content) ? record.message.content : []);
   for (const b of blocks) {
     if (b && /tool(_|-)?use|toolcall|tool_call|function_call/i.test(String(b.type))) {
-      out.push({ agent: ctx.agent, sessionId: ctx.sessionId, project: ctx.project, ts, role: 'tool', toolName: b.name || b.toolName || 'tool' });
+      out.push({ agent: ctx.agent, sessionId: ctx.sessionId, project: ctx.project, ts, role: 'tool', toolName: b.name || b.toolName || 'tool', detail: toolDetail(b.input || b.arguments) });
     }
   }
   return out;
@@ -176,7 +194,7 @@ export function harvestEvents(record, ctx = {}) {
 
 function genericRoots(agentId) {
   const s = STORES.find((x) => x.id === agentId); if (!s) return [];
-  return s.paths.map((p) => p.replace('~', HOME)).filter((p) => fs.existsSync(p));
+  return s.paths.map((p) => p.replace('~', home())).filter((p) => fs.existsSync(p));
 }
 
 /** Fallback collector: harvest events from raw JSON/JSONL under a store's roots. */
@@ -211,7 +229,7 @@ export function collectFor(id, o = {}) {
 // ---------------------------------------------------------------------------
 function collectPi(o) {
   const events = [];
-  const root = path.join(HOME, '.pi/agent/sessions');
+  const root = path.join(home(), '.pi/agent/sessions');
   if (!fs.existsSync(root)) return events;
   for (const file of walkFiles(root, (n) => n.endsWith('.jsonl'))) {
     let sid = path.basename(file, '.jsonl'); let proj = basenameOf(path.dirname(file));
@@ -220,13 +238,13 @@ function collectPi(o) {
       if (r.type === 'session') { sid = r.id || sid; proj = basenameOf(r.cwd) || proj; return; }
       if (r.type !== 'message' || !r.message) return;
       const m = r.message;
-      if (m.role === 'toolResult') { events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: 'tool', toolName: m.toolName || 'tool' }); return; }
+      if (m.role === 'toolResult') { if (m.isError) events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: 'tool_error', toolName: m.toolName || 'tool', text: firstText(m.content) }); return; }
       if (m.role !== 'user' && m.role !== 'assistant') return;
       const text = textFromContent(m.content);
       if (text) events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: m.role, text, model: m.model });
       if (Array.isArray(m.content)) {
         for (const b of m.content) {
-          if (b && (b.type === 'toolCall' || b.type === 'tool_use')) events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: 'tool', toolName: b.name || b.toolName || 'tool' });
+          if (b && (b.type === 'toolCall' || b.type === 'tool_use')) events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: 'tool', toolName: b.name || b.toolName || 'tool', detail: toolDetail(b.arguments || b.input) });
         }
       }
       if (m.usage) events.push({ agent: 'pi', sessionId: sid, project: proj, ts, role: 'usage', model: m.model,
@@ -240,7 +258,7 @@ function collectPi(o) {
 
 function collectCodex(o) {
   const events = [];
-  const root = path.join(HOME, '.codex/sessions');
+  const root = path.join(home(), '.codex/sessions');
   if (!fs.existsSync(root)) return events;
   for (const file of walkFiles(root, (n) => n.endsWith('.jsonl'))) {
     let sid = path.basename(file, '.jsonl'); let proj = 'codex';
@@ -263,7 +281,7 @@ function collectCodex(o) {
           ctx: (p.info.last_token_usage && p.info.last_token_usage.input_tokens) || 0 });
       }
       if (p.type === 'function_call' || p.type === 'local_shell_call' || p.type === 'custom_tool_call') {
-        events.push({ agent: 'codex', sessionId: sid, project: proj, ts, role: 'tool', toolName: p.name || p.type });
+        events.push({ agent: 'codex', sessionId: sid, project: proj, ts, role: 'tool', toolName: p.name || p.type, detail: toolDetail(p.arguments || p.input || p.action) });
       }
     });
   }
@@ -272,7 +290,7 @@ function collectCodex(o) {
 
 function collectOpencode(o) {
   const events = [];
-  const roots = ['~/.local/share/opencode/storage', '~/.opencode/storage', '~/.config/opencode/storage'].map((p) => p.replace('~', HOME));
+  const roots = ['~/.local/share/opencode/storage', '~/.opencode/storage', '~/.config/opencode/storage'].map((p) => p.replace('~', home()));
   const root = roots.find((p) => fs.existsSync(p)); if (!root) return events;
 
   // sessions: session/<group>/<id>.json
@@ -298,7 +316,12 @@ function collectOpencode(o) {
     const blocks = parts[m.id] || [];
     const text = blocks.filter((b) => b.type === 'text').map((b) => b.text || '').join('\n');
     if (text) events.push({ agent: 'opencode', sessionId: m.sessionID, project: proj, ts, role: m.role, text, model: m.modelID });
-    for (const b of blocks) if (b.type === 'tool' || b.type === 'tool_use') events.push({ agent: 'opencode', sessionId: m.sessionID, project: proj, ts, role: 'tool', toolName: (b.tool && (b.tool.name || b.tool)) || 'tool' });
+    for (const b of blocks) {
+      if (b.type !== 'tool' && b.type !== 'tool_use') continue;
+      const base = { agent: 'opencode', sessionId: m.sessionID, project: proj, ts, toolName: (b.tool && (b.tool.name || b.tool)) || 'tool' };
+      events.push({ ...base, role: 'tool', detail: toolDetail(b.state && b.state.input) });
+      if (b.state && b.state.status === 'error') events.push({ ...base, role: 'tool_error' });
+    }
     if (m.cost != null || m.tokens) events.push({ agent: 'opencode', sessionId: m.sessionID, project: proj, ts, role: 'usage', model: m.modelID,
       input: (m.tokens && m.tokens.input) || 0, output: (m.tokens && m.tokens.output) || 0,
       cacheRead: (m.tokens && m.tokens.cache && m.tokens.cache.read) || 0, cacheWrite: (m.tokens && m.tokens.cache && m.tokens.cache.write) || 0,
@@ -309,7 +332,7 @@ function collectOpencode(o) {
 
 function collectContinue(o) {
   const events = [];
-  const dir = path.join(HOME, '.continue/sessions');
+  const dir = path.join(home(), '.continue/sessions');
   if (!fs.existsSync(dir)) return events;
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith('.json') || f === 'sessions.json') continue;
@@ -324,7 +347,7 @@ function collectContinue(o) {
       if (text) events.push({ agent: 'continue', sessionId: s.sessionId || f, project: proj, ts: null, role, text });
     });
   }
-  const dd = path.join(HOME, '.continue/dev_data');
+  const dd = path.join(home(), '.continue/dev_data');
   if (fs.existsSync(dd)) for (const f of walkFiles(dd, (n) => n.endsWith('.jsonl'))) {
     readJsonl(f, (r) => {
       if (r.promptTokens == null && r.generatedTokens == null) return;
@@ -336,7 +359,7 @@ function collectContinue(o) {
 
 function collectZed(o) {
   const events = [];
-  const root = path.join(HOME, 'Library/Application Support/Zed/threads');
+  const root = path.join(home(), 'Library/Application Support/Zed/threads');
   if (!fs.existsSync(root)) return events;
   const dbs = fs.readdirSync(root).filter((n) => n.endsWith('.db'));
   for (const name of dbs) {
@@ -355,7 +378,7 @@ function collectZed(o) {
       for (const m of msgs) {
         const text = textFromContent(m.content) || m.text || '';
         if (text) events.push({ agent: 'zed', sessionId: id, project: proj, ts, role: m.role === 'assistant' ? 'assistant' : 'user', text });
-        if (Array.isArray(m.content)) for (const b of m.content) if (b && b.type === 'tool_use') events.push({ agent: 'zed', sessionId: id, project: proj, ts, role: 'tool', toolName: b.name });
+        if (Array.isArray(m.content)) for (const b of m.content) if (b && b.type === 'tool_use') events.push({ agent: 'zed', sessionId: id, project: proj, ts, role: 'tool', toolName: b.name, detail: toolDetail(b.input) });
       }
       if (summary) events.push({ agent: 'zed', sessionId: id, project: proj, ts, role: 'title', text: summary });
     }
@@ -375,7 +398,7 @@ function extractMessages(node, out = [], depth = 0) {
 
 function collectCursor(o) {
   const events = [];
-  const db = path.join(HOME, 'Library/Application Support/Cursor/User/globalStorage/state.vscdb');
+  const db = path.join(home(), 'Library/Application Support/Cursor/User/globalStorage/state.vscdb');
   if (!fs.existsSync(db)) return events;
   // composers
   const headers = sqlite(db, 'SELECT composerId, createdAt, value FROM composerHeaders;');
@@ -410,85 +433,274 @@ const ADAPTERS = { pi: collectPi, codex: collectCodex, opencode: collectOpencode
 export const PARSABLE = Object.keys(ADAPTERS);
 
 // ---------------------------------------------------------------------------
-// events -> analysis data shape
+// Claude Code — streamed, since its logs are the largest store
 // ---------------------------------------------------------------------------
-function eventsToData(events, o) {
-  const cutoff = o.days ? Date.now() - o.days * 864e5 : null;
-  const prompts = [], tools = [], titles = [], models = {}, sources = {}, usage = [], skills = {};
-  const sessions = new Map();
-  let totalUser = 0, totalAssistant = 0;
-
-  for (const e of events) {
-    if (cutoff && e.ts && e.ts < cutoff) continue;
-    if (e.project && o.project && !e.project.includes(o.project)) continue;
-    const agent = e.agent;
-    if (e.role === 'title') { titles.push({ proj: e.project, ts: e.ts, t: e.text, agent }); continue; }
-    if (e.role === 'usage') { usage.push({ agent, sessionId: e.sessionId, proj: e.project, ts: e.ts, model: e.model, input: e.input || 0, output: e.output || 0, cacheRead: e.cacheRead || 0, cacheWrite: e.cacheWrite || 0, reasoning: e.reasoning || 0, ctx: e.ctx || 0, cost: e.cost != null ? e.cost : null, cumulative: !!e.cumulative }); continue; }
-    if (e.role === 'skill') { const nm = e.text || e.toolName || 'skill'; skills[nm] = (skills[nm] || 0) + 1; continue; }
-    if (e.role === 'tool') { tools.push({ proj: e.project || agent, ts: e.ts, name: e.toolName || 'tool', agent }); continue; }
-    if (e.role !== 'user' && e.role !== 'assistant') continue;
-    if (e.role === 'user') totalUser++; else totalAssistant++;
-    if (e.model) models[e.model] = (models[e.model] || 0) + 1;
-    const c = classify(e.text); if (!c) continue;
-    sources[`${agent}:log`] = (sources[`${agent}:log`] || 0) + 1;
-    prompts.push({ proj: e.project || agent, ts: e.ts, text: c.text, len: c.text.length, src: 'log', template: c.template, agent });
-    if (e.sessionId && e.ts) {
-      const key = `${agent}:${e.sessionId}`;
-      let s = sessions.get(key);
-      if (!s) { s = { proj: e.project || agent, turns: 0, first: e.ts, last: e.ts, agent }; sessions.set(key, s); }
-      s.turns++; s.last = Math.max(s.last, e.ts);
-    }
+/** Characters of text inside a content value; images count as ~1.6k tokens. */
+function textLen(v, depth = 0) {
+  if (v == null || depth > 6) return 0;
+  if (typeof v === 'string') return v.length;
+  if (Array.isArray(v)) return v.reduce((n, x) => n + textLen(x, depth + 1), 0);
+  if (typeof v === 'object') {
+    if (v.type === 'image') return 6400;
+    let n = 0;
+    for (const [k, x] of Object.entries(v)) if (k !== 'type' && k !== 'signature' && k !== 'id' && k !== 'tool_use_id') n += textLen(x, depth + 1);
+    return n;
   }
-  return { files: [], roots: [], prompts, tools, titles, humanTurns: [], models, versions: {}, sources,
-    sessions: [...sessions.values()], totalUser, totalAssistant, parseErrors: 0, interruptions: 0, usage, skills, costs: [], commands: {} };
-}
-
-function emptyData() {
-  return { files: [], roots: [], prompts: [], tools: [], titles: [], humanTurns: [], models: {}, versions: {},
-    sources: {}, sessions: [], totalUser: 0, totalAssistant: 0, parseErrors: 0, interruptions: 0, usage: [], skills: {}, costs: [], commands: {} };
-}
-
-function mergeInto(base, add) {
-  base.prompts.push(...add.prompts); base.tools.push(...add.tools); base.titles.push(...add.titles);
-  base.sessions.push(...add.sessions);
-  base.usage.push(...(add.usage || []));
-  for (const [k, v] of Object.entries(add.skills || {})) base.skills[k] = (base.skills[k] || 0) + v;
-  if (add.costs) base.costs.push(...add.costs);
-  for (const [k, v] of Object.entries(add.commands || {})) base.commands[k] = (base.commands[k] || 0) + v;
-  base.totalUser += add.totalUser; base.totalAssistant += add.totalAssistant;
-  for (const [k, v] of Object.entries(add.models)) base.models[k] = (base.models[k] || 0) + v;
-  for (const [k, v] of Object.entries(add.sources)) base.sources[k] = (base.sources[k] || 0) + v;
-  return base;
+  return 0;
 }
 
 /**
- * Merge non-Claude agent data into a Claude-shaped data object.
- * `o.allAgents` or `o.agent` triggers this. Claude data is expected to already
- * be tagged with agent:'claude' by the caller.
+ * Context sources for Claude attachments. `max` sources are re-sent snapshots (system
+ * prompt, memory files): the largest one is what sits in context; the rest accumulate.
  */
-export async function mergeOthers(data, o) {
-  if (o.agent === 'claude') return data; // Claude data is already the only thing loaded
-  const wanted = o.agent ? [o.agent] : PARSABLE;
-  const merged = o.agent ? emptyData() : data;
-  for (const id of wanted) {
-    const fn = ADAPTERS[id]; if (!fn) continue;
-    try {
-      let ev = fn(o) || [];
-      if (!ev.length) {
-        const g = collectGeneric(id, o);
-        if (g.length) { ev = g; if (o.errors) console.error(`[agents] ${id}: precise adapter empty; shape-based fallback recovered ${g.length} events`); }
+const ATTACHMENT_CTX = {
+  prompt_snapshot: ['system', (a) => a.systemPrompt, true],
+  instructions: ['memory', (a) => (a.files || []).map((f) => f.content), true],
+  skill_listing: ['skills', (a) => a.content],
+  invoked_skills: ['skills', (a) => (a.skills || []).map((x) => x.content)],
+  hook_additional_context: ['hooks', (a) => a.content],
+  deferred_tools_delta: ['toolDefs', (a) => a.addedLines],
+  agent_listing_delta: ['toolDefs', (a) => a.addedLines],
+  mcp_instructions_delta: ['toolDefs', (a) => a.addedBlocks],
+  file: ['files', (a) => a.content],
+  edited_text_file: ['files', (a) => a.snippet],
+  plan_file_reference: ['files', (a) => a.planContent],
+};
+const REMINDER_ATTACHMENTS = /reminder|date|environment|model|session_context|plan_mode|auto_mode|queued_command/;
+
+/**
+ * Installed skills and MCP servers announced to the model, with the characters each adds:
+ * skill listings ("- name: description" lines), MCP server instructions, and deferred MCP
+ * tool names (mcp__<server>__<tool>).
+ */
+function loadedFromAttachment(a) {
+  const out = [];
+  if (a.type === 'skill_listing' && typeof a.content === 'string') {
+    for (const line of a.content.split(/\n(?=- )/)) {
+      const m = /^- ([^\n]+?): /.exec(line); // plugin skills are "plugin:skill: description"
+      if (m) out.push({ kind: 'skill', name: m[1].trim(), chars: line.length });
+    }
+  } else if (a.type === 'mcp_instructions_delta') {
+    (a.addedNames || []).forEach((name, i) => out.push({ kind: 'mcp', name, chars: textLen((a.addedBlocks || [])[i]) }));
+  } else if (a.type === 'deferred_tools_delta') {
+    (a.addedNames || []).forEach((name, i) => {
+      const m = /^mcp__(.+?)__/.exec(name);
+      if (m) out.push({ kind: 'mcp', name: m[1], chars: textLen((a.addedLines || [])[i]) || name.length });
+    });
+  }
+  return out;
+}
+
+/**
+ * A skill's name from its base directory. Plugin skills live under
+ * plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill> and are named "plugin:skill",
+ * matching how they are listed and invoked.
+ */
+function skillName(dir) {
+  const parts = String(dir).trim().split(/[\\/]/).filter(Boolean);
+  const skill = parts[parts.length - 1];
+  const i = parts.indexOf('cache');
+  return parts[i - 1] === 'plugins' && parts.length > i + 2 && parts.includes('skills') ? `${parts[i + 2]}:${skill}` : skill;
+}
+
+/**
+ * One name per hook: tool hooks keep their tool ("PreToolUse:Bash"); other events group under the
+ * event, since "SessionStart:startup" and "SessionStart:compact" are the same hook firing.
+ */
+function hookName(a) {
+  const ev = a.hookEvent || String(a.hookName || 'hook').split(':')[0];
+  return /ToolUse|PermissionRequest/.test(ev) && a.hookName && a.hookName.includes(':') ? a.hookName : ev;
+}
+
+/** The first few hundred characters of a tool result, for classifying why it failed. */
+function firstText(content) {
+  const t = typeof content === 'string' ? content : Array.isArray(content) ? content.map((b) => (b && b.text) || '').join(' ') : '';
+  return t.slice(0, 300);
+}
+
+function subagentMeta(file) {
+  if (!/[\\/]subagents[\\/]/.test(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file.replace(/\.jsonl$/, '.meta.json'), 'utf8')); } catch { return {}; }
+}
+
+export function claudeRoots(o = {}) {
+  if (o.dirs && o.dirs.length) return o.dirs;
+  const dirs = [path.join(home(), '.claude', 'projects')];
+  if (o.includeTranscripts) dirs.push(path.join(home(), '.claude', 'transcripts'));
+  return dirs;
+}
+
+function claudeProject(file, roots) {
+  const root = roots.find((r) => file.startsWith(r)) || roots[0];
+  const rel = path.relative(root, file);
+  let name = rel.split(path.sep)[0];
+  if (name.endsWith('.jsonl')) name = path.basename(rel, '.jsonl'); // transcripts style
+  return name.replace(/^-Users-[^-]+-workspace-/, '').replace(/^-Users-[^-]+-/, '~').replace(/^ses_.*/, 'transcript');
+}
+
+/**
+ * Claude Code transcripts, including subagent files (`<session>/subagents/agent-*.jsonl`).
+ * Subagent records carry the parent sessionId and `isSidechain`, so their work is
+ * attributed to the parent session but never counted as human prompts.
+ */
+export async function collectClaude(o = {}) {
+  const roots = claudeRoots(o);
+  const files = [];
+  for (const r of roots) walkFiles(r, (n) => n.endsWith('.jsonl'), files, 200000);
+  const events = [];
+  const seen = new Set(); // resumed/forked sessions copy earlier records into a new file
+  let parseErrors = 0;
+  for (const file of files) {
+    const project = claudeProject(file, roots);
+    const fileSid = path.basename(file, '.jsonl');
+    const meta = subagentMeta(file);
+    const toolNames = new Map(); // tool_use id -> tool name, to attribute tool output
+    const rl = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
+    for await (const line of rl) {
+      if (!line) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { parseErrors++; continue; }
+      if (rec.uuid) { if (seen.has(rec.uuid)) continue; seen.add(rec.uuid); }
+      const ts = rec.timestamp ? Date.parse(rec.timestamp) : null;
+      const base = { agent: 'claude', sessionId: rec.sessionId || fileSid, project, ts };
+      if (rec.isSidechain) base.sidechain = rec.agentId || true;
+      if (meta && meta.agentType) base.agentType = meta.agentType;
+      const ctx = (cat, v, extra) => { const chars = textLen(v); if (chars) events.push({ ...base, role: 'ctx', cat, chars, ...extra }); };
+      if (rec.cwd) base.cwd = rec.cwd;
+      if (rec.gitBranch) base.branch = rec.gitBranch;
+
+      if (rec.type === 'user') {
+        const content = rec.message && rec.message.content;
+        let text = null;
+        if (typeof content === 'string') text = content;
+        else if (Array.isArray(content)) {
+          for (const b of content) {
+            if (!b || b.type !== 'tool_result') continue;
+            const tool = toolNames.get(b.tool_use_id) || 'tool';
+            ctx('toolOutput', b.content, { tool });
+            if (b.is_error) events.push({ ...base, role: 'tool_error', toolName: tool, text: firstText(b.content) });
+          }
+          const block = content.find((b) => b && b.type === 'text');
+          if (block && !rec.isMeta) text = block.text;
+          // skill instructions arrive as meta records: count the load, never a prompt
+          const meta = rec.isMeta && block && typeof block.text === 'string' && block.text.match(/Base directory for this skill:\s*([^\n]+)/);
+          if (meta) { events.push({ ...base, role: 'skill', text: skillName(meta[1]), via: 'load', chars: block.text.length }); ctx('skills', block.text); continue; }
+        }
+        const t = text && text.trim();
+        if (!t) continue;
+        const cm = t.match(/<command-name>([^<]+)<\/command-name>/);
+        if (cm) { events.push({ ...base, role: 'command', text: cm[1] }); continue; }
+        const sk = t.match(/Base directory for this skill:\s*([^\n]+)/);
+        if (sk) { const name = skillName(sk[1]); events.push({ ...base, role: 'skill', text: name, via: 'load', chars: t.length }); ctx('skills', t); continue; }
+        if (/^\[Request interrupted/.test(t)) { events.push({ ...base, role: 'interrupt' }); continue; }
+        events.push({ ...base, role: 'user', text: t, src: rec.promptSource || (rec.isSidechain ? 'subagent' : 'typed') });
+        ctx(NOISE.some((re) => re.test(t)) ? 'reminders' : 'userText', t);
+      } else if (rec.type === 'assistant' && rec.message) {
+        const m = rec.message;
+        events.push({ ...base, role: 'assistant', model: m.model });
+        const u = m.usage;
+        if (u) events.push({ ...base, role: 'usage', model: m.model,
+          input: u.input_tokens || 0, output: u.output_tokens || 0,
+          cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0,
+          reasoning: (u.output_tokens_details && u.output_tokens_details.thinking_tokens) || 0 });
+        if (Array.isArray(m.content)) for (const b of m.content) {
+          if (!b) continue;
+          if (b.type === 'thinking') { ctx('reasoning', b.thinking); continue; }
+          if (b.type === 'text') { ctx('assistantText', b.text); continue; }
+          if (b.type !== 'tool_use') continue;
+          if (b.id) toolNames.set(b.id, b.name);
+          ctx('toolInput', b.input);
+          events.push({ ...base, role: 'tool', toolName: b.name, detail: toolDetail(b.input) });
+          if (b.name === 'Skill' && b.input && b.input.skill) events.push({ ...base, role: 'skill', text: b.input.skill, via: 'tool' });
+        }
+      } else if (rec.type === 'attachment' && rec.attachment) {
+        const a = rec.attachment; const known = ATTACHMENT_CTX[a.type];
+        for (const l of loadedFromAttachment(a)) events.push({ ...base, role: 'loaded', ...l });
+        if (/^hook_/.test(a.type || '')) events.push({ ...base, role: 'hook', event: a.hookEvent || null, name: hookName(a),
+          command: a.command ? String(a.command).slice(0, 200) : null, ms: a.durationMs != null ? a.durationMs : null,
+          failed: a.exitCode != null ? a.exitCode !== 0 : /error|fail/.test(a.type), chars: a.type === 'hook_additional_context' ? textLen(a.content) : 0 });
+        if (known) ctx(known[0], known[1](a), known[2] ? { max: true } : undefined);
+        else if (REMINDER_ATTACHMENTS.test(a.type || '')) ctx('reminders', a.text != null ? a.text : a.content);
+      } else if (rec.type === 'system' && rec.subtype === 'compact_boundary') {
+        const cm = rec.compactMetadata || {};
+        events.push({ ...base, role: 'compact', trigger: cm.trigger || null, preTokens: cm.preTokens || 0 });
+      } else if (rec.type === 'system' && rec.subtype === 'api_error') {
+        events.push({ ...base, role: 'api_error' });
+      } else if (rec.type === 'cost-state' && rec.totalCostUSD != null) {
+        events.push({ ...base, role: 'cost', usd: rec.totalCostUSD, modelUsage: rec.modelUsage || null });
+      } else if ((rec.type === 'custom-title' && rec.customTitle) || (rec.type === 'ai-title' && rec.aiTitle)) {
+        events.push({ ...base, role: 'title', text: rec.customTitle || rec.aiTitle, custom: rec.type === 'custom-title' });
       }
-      mergeInto(merged, eventsToData(ev, o));
-    } catch (err) { if (o.errors) console.error(`[agents] ${id}: ${err.message}`); }
+    }
   }
-  if (o.agent) {
-    // single-agent filter: keep only that agent
-    const keep = (arr) => { const f = arr.filter((x) => x.agent === o.agent); arr.length = 0; arr.push(...f); };
-    keep(merged.prompts); keep(merged.tools); keep(merged.titles);
-    const s = merged.sessions.filter((x) => x.agent === o.agent); merged.sessions.length = 0; merged.sessions.push(...s);
+  return { events, files, parseErrors };
+}
+
+// ---------------------------------------------------------------------------
+// One event stream for every selected agent, with shared filters applied
+// ---------------------------------------------------------------------------
+/**
+ * Load normalized events. Default is Claude only; `o.allAgents` adds every parsable
+ * agent, `o.agent` restricts to one. `o.days` / `o.project` filter every agent alike.
+ * Returns { events, files, parseErrors } — `files` lists transcript sources (paths for
+ * Claude, `agent:session` ids for stores without one-file-per-session).
+ */
+export async function loadEvents(o = {}) {
+  const ids = o.agent ? [o.agent] : (o.allAgents ? ['claude', ...PARSABLE] : ['claude']);
+  const cutoff = o.days ? Date.now() - o.days * 864e5 : null;
+  const keep = (e) => (!cutoff || !e.ts || e.ts >= cutoff) && (!o.project || (e.project && e.project.includes(o.project)));
+  const events = []; const files = []; let parseErrors = 0;
+  for (const id of ids) {
+    let ev = [];
+    if (id === 'claude') {
+      const r = await collectClaude(o);
+      ev = r.events; files.push(...r.files); parseErrors += r.parseErrors;
+    } else {
+      if (!ADAPTERS[id]) continue;
+      try { ev = ADAPTERS[id](o) || []; } catch (err) { if (o.errors) console.error(`[agents] ${id}: ${err.message}`); }
+      if (!ev.length) {
+        ev = collectGeneric(id, o);
+        if (ev.length && o.errors) console.error(`[agents] ${id}: precise adapter empty; shape-based fallback recovered ${ev.length} events`);
+      }
+      files.push(...new Set(ev.map((e) => `${id}:${e.sessionId}`)));
+    }
+    for (const e of ev) if (keep(e)) events.push(e);
   }
-  merged.files = data.files; merged.roots = data.roots;
-  return merged;
+  return { events, files, parseErrors };
+}
+
+/** Flatten events into the aggregate arrays `analyze()` consumes. */
+export function eventsToData(events, o = {}) {
+  const prompts = [], tools = [], titles = [], usage = [], costs = [];
+  const models = {}, sources = {}, skills = {}, commands = {};
+  let totalUser = 0, totalAssistant = 0, interruptions = 0;
+  const inc = (m, k) => { m[k] = (m[k] || 0) + 1; };
+
+  for (const e of events) {
+    const { agent, sessionId } = e;
+    const proj = e.project || agent;
+    switch (e.role) {
+      case 'title': titles.push({ proj, ts: e.ts, t: e.text, agent }); break;
+      case 'usage': usage.push({ agent, sessionId, proj, ts: e.ts, model: e.model, input: e.input || 0, output: e.output || 0, cacheRead: e.cacheRead || 0, cacheWrite: e.cacheWrite || 0, reasoning: e.reasoning || 0, ctx: e.ctx || 0, cost: e.cost != null ? e.cost : null, cumulative: !!e.cumulative }); break;
+      case 'cost': costs.push({ agent, sessionId, usd: e.usd, modelUsage: e.modelUsage, ts: e.ts }); break;
+      case 'skill': inc(skills, e.text || e.toolName || 'skill'); break;
+      case 'command': inc(commands, e.text); break;
+      case 'interrupt': interruptions++; break;
+      case 'tool': tools.push({ proj, ts: e.ts, name: e.toolName || 'tool', agent, sessionId }); break;
+      case 'assistant': totalAssistant++; if (e.model) inc(models, e.model); break;
+      case 'user': {
+        if (e.sidechain) break; // subagent prompt, not a human turn
+        totalUser++;
+        if (e.src && !o.allSources && !HUMAN_SRC.includes(e.src)) break;
+        const c = classify(e.text); if (!c) break;
+        inc(sources, e.src ? e.src : `${agent}:log`);
+        prompts.push({ proj, ts: e.ts, text: c.text, len: c.text.length, src: e.src || 'log', template: c.template, agent, sessionId });
+        break;
+      }
+      default: break;
+    }
+  }
+  return { prompts, tools, titles, models, sources, usage, costs, skills, commands, totalUser, totalAssistant, interruptions };
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +708,7 @@ export async function mergeOthers(data, o) {
 // ---------------------------------------------------------------------------
 export function scanStores() {
   return STORES.map((s) => {
-    const found = s.paths.map((p) => p.replace('~', HOME)).filter((p) => fs.existsSync(p));
+    const found = s.paths.map((p) => p.replace('~', home())).filter((p) => fs.existsSync(p));
     let files = 0, bytes = 0;
     for (const p of found) {
       const st = fs.statSync(p);
