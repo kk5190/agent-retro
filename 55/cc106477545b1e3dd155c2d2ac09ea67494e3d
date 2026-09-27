@@ -1,0 +1,23 @@
+package.json
+  s_135e7898200b4f::t_0b4f5546bca550 50-58
+docs/guide.md
+  s_135e7898200b4f::t_184ee1d4501a38 1-395
+README.md
+  s_135e7898200b4f::t_a54328767468bf 3-5,7,9,14,16,21-31,33-34,36,38,40,42,45-46,49-51,53,56-59,62,64-68,70-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "55cc106477545b1e3dd155c2d2ac09ea67494e3d",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
