@@ -47,5 +47,13 @@
     "developer-productivity",
     "analytics"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kk5190/agent-retro.git"
+  },
+  "homepage": "https://github.com/kk5190/agent-retro#readme",
+  "bugs": {
+    "url": "https://github.com/kk5190/agent-retro/issues"
+  }
 }
