@@ -264,10 +264,6 @@
   .vq q { display: block; color: var(--ink-2); margin-bottom: 6px; }
   .miss { display: inline-block; font-size: 11.5px; padding: 1px 8px; margin: 0 4px 4px 0; border-radius: 999px; background: var(--alert-soft); color: var(--alert); }
 
-  .sprintbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; }
-  .sprintbar > label { font-size: 12px; color: var(--ink-3); }
-  .sprintbar input[type=date] { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 8px; }
-  #sprintSettings[open] .adv-panel { left: 0; right: auto; }
 
   /* App shell: tabs + time period ------------------------------------------- */
   .top-in { gap: 10px 18px; }
@@ -380,8 +376,8 @@
       <a href="#sessions" data-page="sessions">Sessions</a>
     </nav>
     <div class="seg" role="group" aria-label="Time period">
-      <button type="button" data-scope="sprint">This sprint</button>
-      <button type="button" data-scope="last">Last sprint</button>
+      <button type="button" data-scope="current">This month</button>
+      <button type="button" data-scope="last">Last month</button>
       <button type="button" data-scope="all">All time</button>
     </div>
     <div class="filters" id="filters">
@@ -392,14 +388,15 @@
       <details class="adv">
         <summary>Settings</summary>
         <div class="adv-panel">
-          <form id="sprintForm" style="display:grid;gap:8px">
-            <b style="font-size:13px">Sprint calendar</b>
-            <label for="sprintStart" style="display:block">First day of any sprint<small>e.g. a Wednesday your sprint starts on</small></label>
-            <input type="date" id="sprintStart" required />
-            <label for="sprintDays" style="display:block">Length</label>
-            <select id="sprintDays"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary">Save</button><button type="button" id="sprintClear">Use rolling 14 days</button></div>
-            <span class="status" id="sprintStatus" style="text-align:left"></span>
+          <form id="cycleForm" style="display:grid;gap:8px">
+            <b style="font-size:13px">Review period</b>
+            <p class="hint" id="cycleNow" style="margin:0">Calendar months.</p>
+            <label for="cycleStart" style="display:block">Or review in cycles: first day of any cycle<small>Use this if your work runs in fixed cycles</small></label>
+            <input type="date" id="cycleStart" required />
+            <label for="cycleDays" style="display:block">Length</label>
+            <select id="cycleDays"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary">Use cycles</button><button type="button" id="cycleClear">Use calendar months</button></div>
+            <span class="status" id="cycleStatus" style="text-align:left"></span>
           </form>
           <hr style="border:0;border-top:1px solid var(--rule);margin:4px 0">
           <label><input type="checkbox" id="transcripts" /><span>Include older transcripts<small>Also read ~/.claude/transcripts</small></span></label>
@@ -423,7 +420,7 @@
           <h1 id="verdict">Reading your agent logs…</h1>
           <p id="homeSub"></p>
         </div>
-        <a class="share-link" href="#digest" id="shareBtn">Share this sprint ↗</a>
+        <a class="share-link" href="#digest" id="shareBtn">Summary ↗</a>
       </div>
       <div class="areas" id="areas" role="list"></div>
       <div class="peek panel" id="peek" aria-live="polite"></div>
@@ -435,9 +432,9 @@
   </div>
   <div class="page" id="page-retro" hidden>
     <section id="retro-board" class="intro">
-      <h1>Sprint retro</h1>
+      <h1 id="retroTitle">Retro</h1>
       <p id="scope">Reading your local agent logs…</p>
-      <div class="card" id="sprintCard"></div>
+      <div class="card" id="periodCard"></div>
       <div class="board" id="board"></div>
       <div class="grid g2 gap retro-foot">
         <div class="panel"><h3>Action items</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol></div>
@@ -806,10 +803,17 @@ function dailyTable(id, series, valueOf, fmtV) {
 }
 
 /* ---- summary ---- */
-/* ---- sprint picker + settings ---- */
-function renderSprint(a) {
-  const sp = a.sprint || {};
-  if (sp.calendar) { $('sprintStart').value = sp.calendar.start; $('sprintDays').value = String(sp.calendar.days); }
+/* ---- review period: calendar months, or a cycle from Settings ---- */
+let UNIT = 'month';
+function renderPeriod(a) {
+  const p = a.period || {};
+  UNIT = p.unit || 'month';
+  const cap = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
+  document.querySelector('[data-scope=current]').textContent = `This ${UNIT}`;
+  document.querySelector('[data-scope=last]').textContent = `Last ${UNIT}`;
+  $('retroTitle').textContent = `${cap}ly retro`.replace('Cyclely', 'Cycle');
+  if (p.cycle) { $('cycleStart').value = p.cycle.start; $('cycleDays').value = String(p.cycle.days); }
+  $('cycleNow').textContent = p.cycle ? `Now: ${p.cycle.days}-day cycles from ${dateStr(p.cycle.start)}.` : 'Now: calendar months.';
 }
 
 function renderSummary(a, sessions) {
@@ -817,18 +821,18 @@ function renderSummary(a, sessions) {
   const who = agents.length > 1 ? `${agents.length} agents` : (!agents[0] || agents[0] === 'claude' ? 'Claude Code' : agents[0]);
   const r = a.retro;
   $('scope').textContent = r && r.period.from
-    ? `${r.period.calendar ? `Sprint of ${dateStr(r.period.from)} – ${dateStr(r.period.to)}${r.period.current ? ', in progress' : ''}` : `The last ${r.period.days} days of activity (${dateStr(r.period.from)} – ${dateStr(r.period.to)})`}, from ${who}. Trends compare it with the ${r.period.calendar ? 'previous sprint' : 'two weeks before'}.`
+    ? `${r.period.unit === 'month' ? r.period.name : `The cycle ${dateStr(r.period.from)} – ${dateStr(r.period.to)}`}${r.period.current ? ' (in progress)' : ''}, from ${who}. Trends compare it with the ${r.period.unit} before.`
     : `${fmt(sessions.length)} sessions from ${who}.`;
   if (!r) return;
   const c = r.card;
-  $('sprintCard').innerHTML = `<div class="nums">
-      <div><b>${fmt(c.sessions)}</b><span>sessions this sprint</span></div>
+  $('periodCard').innerHTML = `<div class="nums">
+      <div><b>${fmt(c.sessions)}</b><span>sessions this ${esc(r.period.unit)}</span></div>
       <div><b>${c.spend ? money(c.spend) : '—'}</b><span>recorded spend</span></div>
       <div><b>${c.agentHours} h</b><span>of agent work</span></div>
       <div><b>${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)} of sessions` : 'main task'}</span></div>
     </div><p>${esc(r.headline)}</p>`;
   const COLS = [['wentWell', 'Went well', 'good'], ['didntGoWell', "Didn't go well", 'bad'], ['start', 'Start', 'start'], ['stop', 'Stop', 'stop']];
-  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this sprint.</p>'}</div>`).join('');
+  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this time.</p>'}</div>`).join('');
   $('actions').innerHTML = r.actions.length ? r.actions.map((x, i) => `<li><b>${esc(x.title)}</b><button type="button" data-afix="${i}">Copy fix</button><small>${x.metric ? `Watch: ${esc(x.metric.label)}, now <strong>${esc(x.metric.display)}</strong>` : `Fix: ${esc(FIX_LABEL[x.fix.kind] || 'Fix')} ${esc(x.fix.target)}`}</small></li>`).join('') : '<p class="empty">No action items: nothing crossed a threshold.</p>';
   $('actions').querySelectorAll('[data-afix]').forEach((b) => b.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(r.actions[Number(b.dataset.afix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
@@ -837,7 +841,7 @@ function renderSummary(a, sessions) {
   const k = r.kaizen;
   const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
   $('kaizen').innerHTML = (k.review ? `<div style="font-size:12.5px;color:var(--ink-3)">Since the retro saved ${esc(dateStr(k.review.savedAt.slice(0, 10)))}</div>` + k.review.items.map((it) => `<div class="kz-item"><i>${mark[it.verdict] || '·'}</i><div><b>${esc(it.title)}</b>${it.metric ? `<br><span style="color:var(--ink-3);font-size:12.5px">${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('') : '')
-    + (k.experiment ? `<div class="kz-exp"><b>Experiment for the next ${k.experiment.days} days:</b> ${esc(k.experiment.title)}.<br>Measure ${esc(k.experiment.metric.label)}, now <b>${esc(k.experiment.metric.display)}</b>. Check with <code>${esc(k.experiment.check)}</code>.</div>` : '<p class="empty">No measurable experiment this sprint.</p>')
+    + (k.experiment ? `<div class="kz-exp"><b>Experiment for the next ${esc(k.experiment.span)}:</b> ${esc(k.experiment.title)}.<br>Measure ${esc(k.experiment.metric.label)}, now <b>${esc(k.experiment.metric.display)}</b>. Check with <code>${esc(k.experiment.check)}</code>.</div>` : '<p class="empty">No measurable experiment this time.</p>')
     + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this retro</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`;
   $('saveRetro').addEventListener('click', async () => {
     try { await postJson('/api/retro/save?' + query(), {}); $('saveStatus').textContent = 'Saved. The next retro will review these action items.'; }
@@ -848,7 +852,7 @@ function renderSummary(a, sessions) {
 /* ---- trends ---- */
 const VERDICT = { better: '↓ better', worse: '↑ worse', flat: '→ about the same' };
 const fmtM = (m, v) => (m.usd ? money(v) : m.share ? Math.round(v * 100) + '%' : fmtN(v));
-const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : t.mode === 'sprint' ? 'this sprint vs the previous one' : `last ${t.days} days vs the ${t.days} before`);
+const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
 function renderTrend(a) {
   const t = a.trend;
   if (!t) { $('trendHint').textContent = 'Needs at least 3 sessions in each of the last two 14-day periods. Keep using your agents and check back.'; $('trendTable').innerHTML = ''; return; }
@@ -1294,9 +1298,10 @@ function route() {
 }
 addEventListener('hashchange', route);
 
-/* ---- time period: this sprint / last sprint / all time ---- */
-let SCOPE = 'sprint';
-try { SCOPE = localStorage.getItem('agent-retro:scope') || 'sprint'; } catch { /* private window */ }
+/* ---- time period: this month / last month / all time ---- */
+let SCOPE = 'current';
+try { SCOPE = localStorage.getItem('agent-retro:scope') || 'current'; } catch { /* private window */ }
+if (!['current', 'last', 'all'].includes(SCOPE)) SCOPE = 'current';
 function setScope(sc) {
   SCOPE = sc;
   try { localStorage.setItem('agent-retro:scope', sc); } catch { /* ignore */ }
@@ -1308,7 +1313,8 @@ function ringSvg(frac) {
   const r = 20, C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac));
   return `<svg class="ringv" width="52" height="52" viewBox="0 0 52 52" aria-hidden="true"><circle class="bg" cx="26" cy="26" r="${r}" fill="none" stroke-width="6"/><circle class="fg" cx="26" cy="26" r="${r}" fill="none" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(f * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 26 26)"/></svg>`;
 }
-const STATE_LABEL = { good: 'good', watch: 'watch', act: 'act', none: '—' };
+const STATE_LABEL = { good: 'good', watch: 'watch', act: 'act', none: '—', thin: 'too few' };
+const MIN_SESSIONS = 5; // below this a period says too little to judge (MIN_PERIOD_SESSIONS in sessions.mjs)
 function areasOf(a) {
   const t = (a.trend && a.trend.metrics) || {};
   const tv = (k) => (t[k] ? (t[k].verdict === 'better' ? 'good' : t[k].verdict === 'worse' ? 'act' : 'watch') : 'none');
@@ -1321,13 +1327,14 @@ function areasOf(a) {
   const plugins = E.plugins.filter((p) => p.verdict !== 'disabled' && p.verdict !== 'no activity');
   const usedPlugins = plugins.filter((p) => p.verdict === 'used' || p.verdict === 'rarely used').length;
   const perSession = sessions && a.cost.usd ? a.cost.usd / sessions : null;
-  return [
+  const judge = (list) => (sessions < MIN_SESSIONS ? list.map((x) => ({ ...x, state: 'thin' })) : list);
+  return judge([
     { id: 'cost', name: 'Cost', page: 'cost', state: tv('costPerSession'), frac: null, v: perSession != null ? money(perSession) : '—', s: perSession != null ? 'recorded spend per session' : 'no cost recorded' },
     { id: 'context', name: 'Context', page: 'cost', state: under == null ? 'none' : under < 0.5 ? 'act' : under < 0.75 ? 'watch' : 'good', frac: under, v: under == null ? '—' : rate(under), s: 'of turns under 150k tokens' },
     { id: 'reliability', name: 'Reliability', page: 'work', state: fails == null ? 'none' : fails > 0.1 ? 'act' : fails > 0.05 ? 'watch' : 'good', frac: fails == null ? null : 1 - fails, v: fails == null ? '—' : rate(1 - fails), s: 'of tool calls succeed' },
     { id: 'prompting', name: 'Prompting', page: 'habits', state: !ctxPrac || !ctxPrac.sessions ? 'none' : ctxPrac.share < 0.25 ? 'act' : ctxPrac.share < 0.5 ? 'watch' : 'good', frac: ctxPrac && ctxPrac.sessions ? ctxPrac.share : null, v: ctxPrac && ctxPrac.sessions ? rate(ctxPrac.share) : '—', s: 'of openings give context' },
     { id: 'setup', name: 'Setup', page: 'setup', state: !plugins.length ? 'none' : plugins.length - usedPlugins >= 2 ? 'act' : plugins.length - usedPlugins === 1 ? 'watch' : 'good', frac: plugins.length ? usedPlugins / plugins.length : null, v: plugins.length ? `${usedPlugins} of ${plugins.length}` : '—', s: 'plugins in use' },
-  ];
+  ]);
 }
 let PEEK = null;
 function renderPeek(a) {
@@ -1350,12 +1357,14 @@ function renderHome(a) {
   const r = a.retro, v = a.view || { scope: 'all' };
   const all = v.scope === 'all';
   const c = r ? r.card : null;
-  $('homeEyebrow').textContent = all ? `All time · ${dateStr(v.from)} – ${dateStr(v.to)}` : `${v.scope === 'last' ? 'Last sprint' : 'This sprint'} · ${dateStr(v.from)} – ${dateStr(v.to)}${v.current ? ' · in progress' : ''}`;
+  $('homeEyebrow').textContent = all ? `All time · ${dateStr(v.from)} – ${dateStr(v.to)}` : `${v.scope === 'last' ? 'Last' : 'This'} ${UNIT} · ${UNIT === 'month' ? v.name : `${dateStr(v.from)} – ${dateStr(v.to)}`}${v.current ? ' · in progress' : ''}`;
   $('verdict').textContent = all ? 'Everything you have done with your agents' : r ? r.verdict : 'No sessions yet';
   const t = (a.trend && a.trend.metrics) || {};
   const better = Object.values(t).filter((m) => m.verdict === 'better').length, worse = Object.values(t).filter((m) => m.verdict === 'worse').length;
   const hours = ((a.time || {}).agentMinutes || 0) / 60;
-  $('homeSub').textContent = `${fmt(a.sessions.count)} sessions · ${a.cost.usd ? '$' + Math.round(a.cost.usd).toLocaleString() : 'no recorded spend'} · ${hours.toFixed(1)} h of agent work` + (!all && a.trend ? ` · ${better} metric${better === 1 ? '' : 's'} better and ${worse} worse than the sprint before` : '');
+  $('homeSub').textContent = `${fmt(a.sessions.count)} sessions · ${a.cost.usd ? '$' + Math.round(a.cost.usd).toLocaleString() : 'no recorded spend'} · ${hours.toFixed(1)} h of agent work` + (!all && a.trend ? ` · ${better} metric${better === 1 ? '' : 's'} better and ${worse} worse than the ${UNIT} before` : '');
+  if (!all && a.sessions.count < MIN_SESSIONS) $('homeSub').innerHTML = esc($('homeSub').textContent) + ` · <b>too few sessions to judge</b>${v.scope === 'current' ? ` (<a href="#home" id="seeLast">see last ${esc(UNIT)}</a>)` : ''}`;
+  if ($('seeLast')) $('seeLast').addEventListener('click', (e) => { e.preventDefault(); setScope('last'); load(); });
   $('shareBtn').hidden = all;
   const areas = areasOf(a);
   if (!PEEK || !areas.some((x) => x.id === PEEK)) PEEK = (areas.find((x) => x.state === 'act') || areas[0]).id;
@@ -1373,23 +1382,23 @@ function renderHome(a) {
   const k = r ? r.kaizen : null;
   const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
   $('homeKaizen').innerHTML = k && k.review ? k.review.items.map((it) => `<div class="kz-line"><span>${mark[it.verdict] || '·'}</span><div><b>${esc(it.title)}</b><br><span style="color:var(--ink-3);font-size:12.5px">${it.metric ? `${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)}` : 'not measured'}</span></div></div>`).join('') + '<p style="margin:10px 0 0"><a href="#retro-board">Full retro →</a></p>'
-    : `<p class="empty">No saved retro yet. Open the <a href="#retro-board">retro</a> and choose “Save this retro”; next sprint this box shows what changed.</p>${k && k.experiment ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(k.experiment.title)}</b> (${esc(k.experiment.metric.label)}, now ${esc(k.experiment.metric.display)}).</p>` : ''}`;
+    : `<p class="empty">No saved retro yet. Open the <a href="#retro-board">retro</a> and choose “Save this retro”; next ${UNIT} this box shows what changed.</p>${k && k.experiment ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(k.experiment.title)}</b> (${esc(k.experiment.metric.label)}, now ${esc(k.experiment.metric.display)}).</p>` : ''}`;
 }
 const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
 
 /* ---- Digest: the retro as a short report to share ---- */
 function renderDigest(a) {
   const r = a.retro;
-  if (!r) { $('digest').innerHTML = '<p class="empty">No sprint to report yet.</p>'; return; }
-  const li = (list) => (list.length ? `<ul>${list.map((it) => `<li><b>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing this sprint.</p>');
+  if (!r) { $('digest').innerHTML = '<p class="empty">Nothing to summarise yet.</p>'; return; }
+  const li = (list) => (list.length ? `<ul>${list.map((it) => `<li><b>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : `<p class="empty">Nothing this ${r.period.unit}.</p>`);
   const k = r.kaizen;
-  $('digest').innerHTML = `<p class="eyebrow">Sprint of ${esc(dateStr(r.period.from))} – ${esc(dateStr(r.period.to))} · ${r.card.sessions} sessions${r.card.spend ? ' · $' + Math.round(r.card.spend) : ''} · ${r.card.agentHours} h</p>
+  $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' (in progress)' : ''} · ${r.card.sessions} sessions${r.card.spend ? ' · $' + Math.round(r.card.spend) : ''} · ${r.card.agentHours} h</p>
     <h2>${esc(r.verdict)}</h2><p>${esc(r.headline)}</p>
     <h3>What went well</h3>${li(r.wentWell)}
     <h3>What didn't</h3>${li(r.didntGoWell)}
-    <h3>Try next sprint</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">No action items.</p>'}
-    ${k.review ? `<h3>Last sprint's experiments</h3><ul>${k.review.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
-    <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Paste it into your team channel.</span></div>`;
+    <h3>Try next ${esc(r.period.unit)}</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">No action items.</p>'}
+    ${k.review ? `<h3>Experiments from the last saved retro</h3><ul>${k.review.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
+    <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Keep it in your notes, or next to the code.</span></div>`;
   $('copyMd').addEventListener('click', async () => {
     try { const md = await fetch('/api/retro.md?' + query()).then((x) => x.text()); await navigator.clipboard.writeText(md); $('copyStatus').textContent = 'Copied.'; }
     catch { $('copyStatus').textContent = 'Could not copy; run agent-retro --retro --md instead.'; }
@@ -1425,7 +1434,7 @@ async function load() {
     const q = query();
     const [a, ss] = await Promise.all([getJson('/api/data?' + q), getJson('/api/sessions?' + q)]);
     SESSIONS = ss.sessions || [];
-    renderSprint(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
+    renderPeriod(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
     renderRisk(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
     $('foot').textContent = `Generated ${new Date(a.generatedAt).toLocaleString()} from local logs. Nothing leaves this machine.`;
     st.className = 'status'; st.textContent = '';
@@ -1454,14 +1463,14 @@ async function init() {
   document.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => { setScope(b.dataset.scope); load(); }));
   $('refresh').addEventListener('click', async () => { try { await postJson('/api/reload', {}); } catch { /* load() reports it */ } load(); });
   ['taskFilter', 'sessSort'].forEach((id) => $(id).addEventListener('change', renderExplorer));
-  $('sprintForm').addEventListener('submit', async (e) => {
+  $('cycleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    try { await postJson('/api/config/sprint', { sprint: { start: $('sprintStart').value, days: Number($('sprintDays').value) } }); $('sprintStatus').textContent = 'Saved.'; load(); }
-    catch (err) { $('sprintStatus').textContent = err.message; }
+    try { await postJson('/api/config/cycle', { cycle: { start: $('cycleStart').value, days: Number($('cycleDays').value) } }); $('cycleStatus').textContent = 'Saved.'; load(); }
+    catch (err) { $('cycleStatus').textContent = err.message; }
   });
-  $('sprintClear').addEventListener('click', async () => {
-    try { await postJson('/api/config/sprint', { sprint: null }); $('sprintStatus').textContent = 'Using the last 14 days.'; load(); }
-    catch (err) { $('sprintStatus').textContent = err.message; }
+  $('cycleClear').addEventListener('click', async () => {
+    try { await postJson('/api/config/cycle', { cycle: null }); $('cycleStatus').textContent = 'Using calendar months.'; load(); }
+    catch (err) { $('cycleStatus').textContent = err.message; }
   });
   let timer; $('sessSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderExplorer, 120); });
   route();

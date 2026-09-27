@@ -25,7 +25,7 @@ const SORTS = ['recent', 'cost', 'turns', 'duration', 'tools'];
 export const TOOLS = [
   {
     name: 'get_overview',
-    description: 'Summary of coding-agent usage: volume, per-task profile (sessions, turns, cost, error and correction rates, top tools/commands/skills), tokens, cost, estimated context sources (what fills the window), compactions, subagent types, risk signals, why tool calls fail, working vs waiting time, repeated command sequences, a before/after trend (last 14 days vs the 14 before), and top tools, skills and MCP servers.',
+    description: 'Summary of coding-agent usage: volume, per-task profile (sessions, turns, cost, error and correction rates, top tools/commands/skills), tokens, cost, estimated context sources (what fills the window), compactions, subagent types, risk signals, why tool calls fail, working vs waiting time, repeated command sequences, a before/after trend (the reviewed month vs the month before), and top tools, skills and MCP servers.',
     inputSchema: { type: 'object', properties: { ...FILTERS } },
   },
   {
@@ -49,8 +49,8 @@ export const TOOLS = [
   },
   {
     name: 'get_retro',
-    description: 'A sprint retrospective of the last 14 days of agent use: a sprint card (sessions, spend, agent hours, main task), Went well / Didn\'t go well / Start / Stop items, the top three action items with fixes and the metric to watch, and Kaizen: one measured experiment plus a review of the last saved retro\'s action items (baseline → now). Good for "summarize my last sprint".',
-    inputSchema: { type: 'object', properties: { ...FILTERS, sprint: { type: 'string', description: 'A date inside the sprint to review (YYYY-MM-DD); default: the last completed sprint' } } },
+    description: 'A personal retrospective of one review period of agent use (a calendar month by default, or the configured cycle): a period card (sessions, spend, agent hours, main task), Went well / Didn\'t go well / Start / Stop items, the top three action items with fixes and the metric to watch, and Kaizen: one measured experiment plus a review of the last saved retro\'s action items (baseline → now). Good for "how did my agent use go last month?".',
+    inputSchema: { type: 'object', properties: { ...FILTERS, period: { type: 'string', description: 'A date inside the period to review (YYYY-MM-DD); default: the last completed period' } } },
   },
   {
     name: 'get_extensions',
@@ -79,7 +79,7 @@ export function createServer(o = {}) {
   const cache = new Map();
 
   async function telemetry(args = {}) {
-    const f = { days: args.days || null, project: args.project || null, sprintPick: args.sprint || null };
+    const f = { days: args.days || null, project: args.project || null, periodPick: args.period || null };
     const key = JSON.stringify(f);
     const hit = cache.get(key);
     // The server lives as long as the Claude Code session: re-read the logs once the snapshot is a minute old.

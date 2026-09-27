@@ -43,17 +43,18 @@
  *   --sessions              Print session records as JSON Lines
  *   --text <level>          Text in exported data: none | excerpts (default) | full
  *   --mcp                   Run the MCP server on stdio
- *   --split <date>          Compare before/after a date (default: last 14 days vs the 14 before)
+ *   --split <date>          Compare before/after a date (default: the reviewed period vs the one before)
  *   --label <id>=<task>     Correct one session's task label (<id>= clears it)
  *   --label-accuracy        How often the rules agree with your corrected labels
  *   --demo                  Use a built-in month of synthetic sessions instead of your logs
- *   --retro                 Print only the sprint retro (with --md: paste-ready markdown)
+ *   --retro                 Print only the retro (with --md: paste-ready markdown)
  *   --save-retro            Save this retro's action items so the next one reviews them
- *   --sprint-start <date>   Your sprint calendar: any sprint's first day (e.g. a Wednesday)
- *   --sprint-days <n>       Sprint length in days (default 14)
- *   --save-sprint           Remember --sprint-start/--sprint-days in ~/.agent-retro/config.json
- *   --sprint <date>         Review the sprint containing <date> (default: the last completed one)
- *   --scope <s>             Limit the whole analysis to sprint | last | all (default all)
+ *   --period <date>         Review the period containing <date> (default: the last completed one)
+ *   --scope <s>             Limit the whole analysis to current | last | all (default all)
+ *   --cycle-start <date>    Review in cycles instead of calendar months: any cycle's first day
+ *   --cycle-days <n>        Cycle length in days (default 14)
+ *   --save-cycle            Remember --cycle-start/--cycle-days in ~/.agent-retro/config.json;
+ *                           without --cycle-start, go back to calendar months
  *   --no-history            Skip ~/.claude/history.jsonl
  *   --all-sources           Include SDK/system-injected prompts too
  *   --errors                Print parse warnings to stderr
@@ -67,7 +68,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, sprintWindows, defaultSprint, localDay, localDate, TASK_IDS, toolBucket } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, periodWindows, defaultPeriod, periodName, localDay, localDate, TASK_IDS, toolBucket } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -112,11 +113,11 @@ function parseArgs(argv) {
       case '--demo': o.demo = true; break;
       case '--retro': o.retro = true; break;
       case '--save-retro': o.saveRetro = true; break;
-      case '--sprint-start': o.sprintStart = next(); break;
-      case '--sprint-days': o.sprintDays = Number(next()); break;
-      case '--sprint': o.sprintPick = next(); break;
+      case '--cycle-start': o.cycleStart = next(); break;
+      case '--cycle-days': o.cycleDays = Number(next()); break;
+      case '--period': o.periodPick = next(); break;
       case '--scope': o.scope = next(); break;
-      case '--save-sprint': o.saveSprint = true; break;
+      case '--save-cycle': o.saveCycle = true; break;
       case '--no-history': o.history = false; break;
       case '--all-sources': o.allSources = true; break;
       case '--errors': o.errors = true; break;
@@ -141,28 +142,28 @@ export function readLabels() {
 }
 /** Set (or with task null, clear) the label for one session. */
 // ---------------------------------------------------------------------------
-// Settings — ~/.agent-retro/config.json (currently the sprint calendar)
+// Settings — ~/.agent-retro/config.json (currently the review cycle)
 // ---------------------------------------------------------------------------
 const configFile = () => path.join(home(), '.agent-retro', 'config.json');
 export function readConfig() {
   try { return JSON.parse(fs.readFileSync(configFile(), 'utf8')); } catch { return {}; }
 }
-/** Set (or with null, clear) the sprint calendar: { start: 'YYYY-MM-DD', days }. */
-export function writeSprintConfig(sprint) {
-  if (sprint != null) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(sprint.start || '')) || Number.isNaN(Date.parse(sprint.start))) throw new Error('sprint start must be a date like 2026-09-16');
-    const days = Number(sprint.days);
-    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error('sprint length must be 1–90 days');
-    sprint = { start: sprint.start, days };
+/** Set the review cycle { start: 'YYYY-MM-DD', days }, or with null go back to calendar months. */
+export function writeCycleConfig(cycle) {
+  if (cycle != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(cycle.start || '')) || Number.isNaN(Date.parse(cycle.start))) throw new Error('cycle start must be a date like 2026-09-16');
+    const days = Number(cycle.days);
+    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error('cycle length must be 1–90 days');
+    cycle = { start: cycle.start, days };
   }
   const cfg = readConfig();
-  if (sprint == null) delete cfg.sprint; else cfg.sprint = sprint;
+  if (cycle == null) delete cfg.cycle; else cfg.cycle = cycle;
   fs.mkdirSync(path.dirname(configFile()), { recursive: true });
   fs.writeFileSync(configFile(), JSON.stringify(cfg, null, 2) + '\n');
   return cfg;
 }
 
-/** All sessions in view, at a glance (the retro covers one sprint; this covers everything). */
+/** All sessions in view, at a glance (the retro covers one period; this covers everything). */
 function overview(a, sessions) {
   const tasks = Object.entries(a.tasks || {}).slice(0, 3).map(([id, t]) => ({ id, label: t.label, share: t.share }));
   return {
@@ -211,39 +212,39 @@ export function writeLabel(sessionId, task) {
  */
 /**
  * Load every selected agent's events once and derive everything from that one stream.
- * `o.scope` narrows the view: 'sprint' (the current sprint, or the last 14 days of activity),
- * 'last' (the one before it) or 'all' (default). Trends always compare against the full history.
+ * `o.scope` narrows the view: 'current' (the period in progress), 'last' (the one before it) or
+ * 'all' (default). Periods are calendar months, or a cycle from flags or ~/.agent-retro/config.json.
  */
 export async function loadTelemetry(o) {
   const { events, files, parseErrors } = await loadEvents(o);
   const allSessions = buildSessions(events, { ...o, labels: o.labels || readLabels() });
-  // Sprint: a calendar from flags or ~/.agent-retro/config.json, else a rolling 14 days
-  const calendar = o.sprintStart ? { start: o.sprintStart, days: o.sprintDays || 14 } : readConfig().sprint || null;
-  const windows = sprintWindows(allSessions, calendar);
-  const current = windows[0] || null;
-  const previous = !current ? null : current.rolling ? { from: 2 * current.from - current.to, to: current.from, rolling: true } : windows[1] || null;
-  const scopeWindow = o.scope === 'sprint' ? current : o.scope === 'last' ? previous : null;
+  const cycle = o.cycleStart ? { start: o.cycleStart, days: o.cycleDays || 14 } : readConfig().cycle || null;
+  const windows = periodWindows(allSessions, cycle);
+  const scopeWindow = o.scope === 'current' ? windows[0] || null : o.scope === 'last' ? windows[1] || null : null;
   const inWindow = (t) => !scopeWindow || (t != null && t >= scopeWindow.from && t < scopeWindow.to);
   const sessions = scopeWindow ? allSessions.filter((s) => inWindow(s.start)) : allSessions;
-  // scope events by session, like the retro: a session belongs to the sprint it started in (cost records carry no timestamp)
+  // scope events by session, like the retro: a session belongs to the period it started in (cost records carry no timestamp)
   const inScope = scopeWindow && new Set(sessions.map((s) => `${s.agent}:${s.id}`));
   const data = eventsToData(inScope ? events.filter((e) => inScope.has(`${e.agent}:${e.sessionId}`)) : events, o);
   data.files = files; data.parseErrors = parseErrors;
   data.sessions = sessions.filter((s) => s.start).map((s) => ({ proj: s.project, turns: s.turns.assistant, first: s.start, last: s.end, agent: s.agent }));
   const analysis = analyze(data, o, sessions);
-  const pick = o.sprintPick ? localDay(o.sprintPick) : null;
-  const selected = scopeWindow || (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultSprint(windows);
+  const pick = o.periodPick ? localDay(o.periodPick) : null;
+  const selected = scopeWindow || (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultPeriod(windows);
+  const before = selected ? windows[windows.indexOf(selected) + 1] || null : null;
   const isoDay = localDate;
-  analysis.view = { scope: scopeWindow ? o.scope : 'all', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), calendar: !!calendar };
-  analysis.sprint = { calendar, windows: windows.map((w) => ({ from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
-  analysis.trend = comparePeriods(allSessions, o.split ? { split: Date.parse(o.split) } : { window: selected });
+  const unit = cycle ? 'cycle' : 'month';
+  analysis.view = { scope: scopeWindow ? o.scope : 'all', unit, name: scopeWindow ? periodName(scopeWindow, cycle) : 'all sessions', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), sessions: sessions.length };
+  analysis.period = { unit, cycle, windows: windows.map((w) => ({ name: periodName(w, cycle), from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
+  analysis.trend = comparePeriods(allSessions, o.split ? { split: Date.parse(o.split) } : { window: selected, previous: before });
+  if (analysis.trend && !o.split) Object.assign(analysis.trend, { unit, period: periodName(selected, cycle) });
   const config = readClaudeConfig();
   analysis.extensions = summarizeExtensions(sessions, analysis.inventory, config);
   analysis.recommendations = recommend(analysis, sessions, config).map((r) => {
     const m = analysis.trend && analysis.trend.metrics[REC_METRIC[r.id]];
     return m ? { ...r, trend: { metric: REC_METRIC[r.id], ...m } } : r;
   });
-  analysis.retro = buildRetro(analysis, allSessions, latestRetro(), selected, calendar);
+  analysis.retro = buildRetro(analysis, allSessions, latestRetro(), selected, cycle);
   analysis.overview = overview(analysis, sessions);
   return { data, sessions, analysis };
 }
@@ -489,8 +490,8 @@ function deriveFindings(a, sessions) {
     const outTotal = sum(cb.toolOutputByTool);
     const browser = out.filter(([name]) => toolBucket(name) === 'browser').reduce((x, [, c]) => x + c, 0);
     const [topTool, topOut] = out[0] || ['', 0];
-    F.push({ id: 'context-source', level: v / srcTotal >= 0.4 ? 'attention' : 'info', section: 'tokens',
-      title: `${CONTEXT_LABELS[k] || k} make up ${pct(v / srcTotal)}% of what fills your context window.`,
+    F.push({ id: 'context-source', source: (CONTEXT_LABELS[k] || k).toLowerCase(), level: v / srcTotal >= 0.4 ? 'attention' : 'info', section: 'tokens',
+      title: `${CONTEXT_LABELS[k] || k}: ${pct(v / srcTotal)}% of what fills your context window.`,
       detail: k === 'toolOutput' && outTotal
         ? (browser / outTotal >= 0.25 ? `Browser tools (screenshots, page reads) produce ${pct(browser / outTotal)}% of those results.` : `${prettyTool(topTool)} produces the most (${pct(topOut / outTotal)}%).`)
         : 'Estimated from logged content, main conversation only.' });
@@ -551,11 +552,11 @@ function deriveFindings(a, sessions) {
 function bar(v, max, width = 30) { return '█'.repeat(max ? Math.round((v / max) * width) : 0); }
 
 const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v * 100) + '%' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+v.toFixed(2)));
-const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : t.mode === 'sprint' ? 'this sprint vs the previous one' : `last ${t.days} days vs the ${t.days} before`);
+const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
 
 const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['start', 'Start'], ['stop', 'Stop']];
 
-const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.calendar ? 'sprint' : 'last ' + r.period.days + ' days'} ${r.period.from} → ${r.period.to}${r.period.current ? ' (in progress)' : ''}`);
+const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.name}${r.period.current ? ' (in progress)' : ''}`);
 
 function retroText(r) {
   if (!r) return [];
@@ -574,7 +575,7 @@ function retroText(r) {
     L.push(`    Since the retro saved ${k.review.savedAt.slice(0, 10)}:`);
     for (const it of k.review.items) L.push(`      ${it.verdict === 'better' ? '✓' : it.verdict === 'worse' ? '✗' : '·'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}${it.stillOpen ? ' · still recommended' : ''}`);
   }
-  if (k.experiment) L.push(`    Experiment for the next ${k.experiment.days} days: ${k.experiment.title}.`, `    Measure: ${k.experiment.metric.label}, now ${k.experiment.metric.display}. Check with: ${k.experiment.check}`);
+  if (k.experiment) L.push(`    Experiment for the next ${k.experiment.span}: ${k.experiment.title}.`, `    Measure: ${k.experiment.metric.label}, now ${k.experiment.metric.display}. Check with: ${k.experiment.check}`);
   if (!k.review) L.push('    Save this retro (--save-retro) so the next one reviews how these action items went.');
   return L;
 }
@@ -598,7 +599,7 @@ export function retroMd(r) {
     for (const it of k.review.items) L.push(`- ${it.verdict === 'better' ? '✅' : it.verdict === 'worse' ? '❌' : '➖'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}`);
     L.push('');
   }
-  if (k.experiment) L.push(`**Experiment for the next ${k.experiment.days} days:** ${k.experiment.title}. Measure ${k.experiment.metric.label} (now ${k.experiment.metric.display}); check with \`${k.experiment.check}\`.`);
+  if (k.experiment) L.push(`**Experiment for the next ${k.experiment.span}:** ${k.experiment.title}. Measure ${k.experiment.metric.label} (now ${k.experiment.metric.display}); check with \`${k.experiment.check}\`.`);
   return L;
 }
 
@@ -867,12 +868,12 @@ async function main() {
     const n = writeDemo(dir);
     console.error(`[agent-retro] demo mode: ${n} synthetic sessions in ${dir} (your own logs are not read)`);
   }
-  if (o.sprintStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.sprintStart) || Number.isNaN(Date.parse(o.sprintStart)))) { console.error('--sprint-start needs a date like 2026-09-16'); process.exit(2); }
-  if (o.sprintPick && Number.isNaN(Date.parse(o.sprintPick))) { console.error('--sprint needs a date like 2026-09-20'); process.exit(2); }
-  if (o.saveSprint) {
-    if (!o.sprintStart) { console.error('--save-sprint needs --sprint-start <date> (and optionally --sprint-days <n>)'); process.exit(2); }
-    try { writeSprintConfig({ start: o.sprintStart, days: o.sprintDays || 14 }); } catch (err) { console.error(err.message); process.exit(2); }
-    console.error(`[agent-retro] sprint calendar saved: ${o.sprintDays || 14}-day sprints starting ${o.sprintStart}.`);
+  if (o.cycleStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.cycleStart) || Number.isNaN(Date.parse(o.cycleStart)))) { console.error('--cycle-start needs a date like 2026-09-16'); process.exit(2); }
+  if (o.periodPick && Number.isNaN(Date.parse(o.periodPick))) { console.error('--period needs a date like 2026-09-20'); process.exit(2); }
+  if (o.scope && !['current', 'last', 'all'].includes(o.scope)) { console.error('--scope is current, last or all'); process.exit(2); }
+  if (o.saveCycle) {
+    try { writeCycleConfig(o.cycleStart ? { start: o.cycleStart, days: o.cycleDays || 14 } : null); } catch (err) { console.error(err.message); process.exit(2); }
+    console.error(o.cycleStart ? `[agent-retro] review cycle saved: ${o.cycleDays || 14}-day cycles starting ${o.cycleStart}.` : '[agent-retro] review periods are calendar months again.');
   }
   if (o.ui) { const { startUi } = await import('./ui.mjs'); await startUi(o); return; }
   if (o.listAgents) { const { PARSABLE } = await import('./agents.mjs'); console.log(PARSABLE.join('\n')); return; }

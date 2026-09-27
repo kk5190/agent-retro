@@ -6,8 +6,8 @@
  * http://127.0.0.1:<port>/ and JSON at /api/data (rollup), /api/sessions (session
  * records, `?task=` to filter) and /api/meta. POST /api/reload drops cached results; POST
  * /api/label { sessionId, task } corrects a session's task label; POST /api/retro/save saves the
- * current retro for the next one to review; POST /api/config/sprint { sprint: { start, days } | null }
- * sets the sprint calendar (all same-origin JSON only).
+ * current retro for the next one to review; POST /api/config/cycle { cycle: { start, days } | null }
+ * sets the review cycle, or null for calendar months (all same-origin JSON only).
  *
  * No external assets, no network access beyond localhost.
  */
@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { loadTelemetry, loadHistory, writeLabel, saveRetro, writeSprintConfig, retroMd, CONTEXT_LABELS } from './agent-retro.mjs';
+import { loadTelemetry, loadHistory, writeLabel, saveRetro, writeCycleConfig, retroMd, CONTEXT_LABELS } from './agent-retro.mjs';
 import { TASKS } from './sessions.mjs';
 import { PARSABLE } from './agents.mjs';
 import { sessionView } from './telemetry.mjs';
@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = path.join(__dirname, 'ui', 'index.html');
 const cache = new Map();
 
-/** Options the dashboard was started with (--dir, --tz, --sprint-start, …): the base every query starts from. */
+/** Options the dashboard was started with (--dir, --tz, --cycle-start, …): the base every query starts from. */
 let launch = {};
 
 /** A page query on top of the launch options: the page's filters win where it sets them. */
@@ -37,8 +37,8 @@ function queryOpts(q) {
     includeTranscripts: q.transcripts === '1' || (!has('transcripts') && !!launch.includeTranscripts), history: q.history !== '0' && launch.history !== false,
     allSources: q.all === '1' || (!has('all') && !!launch.allSources), errors: false, format: 'json',
     allAgents: q.agents === '1', agent: q.agent || null,
-    scope: ['sprint', 'last'].includes(q.scope) ? q.scope : null,
-    sprintPick: q.sprint || null, sprintStart: launch.sprintStart || null, sprintDays: launch.sprintDays || null,
+    scope: ['current', 'last'].includes(q.scope) ? q.scope : null,
+    periodPick: q.period || null, cycleStart: launch.cycleStart || null, cycleDays: launch.cycleDays || null,
   };
 }
 
@@ -122,10 +122,10 @@ export function startUi(o = {}) {
           cache.clear();
           return sendJson(res, 200, { ok: true, file });
         }
-        if (url.pathname === '/api/config/sprint' && req.method === 'POST') {
-          const { sprint } = await readBody(req);
-          try { writeSprintConfig(sprint || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
-          launch = { ...launch, sprintStart: null, sprintDays: null }; // the saved calendar now wins over launch flags
+        if (url.pathname === '/api/config/cycle' && req.method === 'POST') {
+          const { cycle } = await readBody(req);
+          try { writeCycleConfig(cycle || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
+          launch = { ...launch, cycleStart: null, cycleDays: null }; // the saved setting now wins over launch flags
           cache.clear();
           return sendJson(res, 200, { ok: true });
         }

@@ -1,20 +1,19 @@
 /**
- * retro.mjs — the analysis as a sprint retrospective.
+ * retro.mjs — the analysis as a personal retrospective of one review period (a month by default).
  *
  * buildRetro(analysis, sessions, previous) arranges what the rest of the pipeline already found
- * into the retro format: a sprint card, then Went well / Didn't go well / Start / Stop, Action
+ * into the retro format: a period card, then Went well / Didn't go well / Start / Stop, Action
  * items, and a Kaizen block — one measured experiment, plus a review of the last saved retro's
  * action items (baseline → now). No new analysis happens here; every item points at the section
  * holding its numbers.
  */
-import { TREND_METRICS, compareMetric, localDate } from './sessions.mjs';
+import { TREND_METRICS, compareMetric, localDate, periodName, MIN_PERIOD_SESSIONS } from './sessions.mjs';
 import { REC_METRIC, PLAYBOOKS } from './recommend.mjs';
 
-export const SPRINT_DAYS = 14;
 const MAX = 4;
 
 /** Short phrases for the one-line verdict: what went better, and what hurt. */
-const WIN = { costPerSession: 'A cheaper sprint', tokensPerSession: 'Leaner sessions', toolErrorRate: 'Fewer tool failures', highContextShare: 'Lighter context', browserOutputShare: 'Fewer screenshots', ackRate: 'Fewer check-ins', correctionRate: 'Fewer corrections', listingTokensPerSession: 'A leaner setup', sensitivePerSession: 'Safer tool use' };
+const WIN = { costPerSession: 'Cheaper sessions', tokensPerSession: 'Leaner sessions', toolErrorRate: 'Fewer tool failures', highContextShare: 'Lighter context', browserOutputShare: 'Fewer screenshots', ackRate: 'Fewer check-ins', correctionRate: 'Fewer corrections', listingTokensPerSession: 'A leaner setup', sensitivePerSession: 'Safer tool use' };
 const DRAG = { costPerSession: 'spend per session went up', tokensPerSession: 'sessions got heavier', toolErrorRate: 'more tool calls failed', highContextShare: 'your context ran hot', browserOutputShare: 'screenshots crowded the context', ackRate: 'more “continue?” check-ins', correctionRate: 'more corrections', listingTokensPerSession: 'your setup got heavier', sensitivePerSession: 'more secret-file access',
   'context-source': 'tool output crowds your context', 'context-pressure': 'your context ran hot', corrections: 'you corrected the agent often', 'error-bursts': 'tools failed in bursts', risk: 'a few risky operations' };
 
@@ -30,23 +29,24 @@ export function formatMetric(key, v) {
 }
 const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
 
-/** Sessions that started inside the sprint window [from, to). */
-function sprintSessions(sessions, window) {
+/** Sessions that started inside the period [from, to). */
+function periodSessions(sessions, window) {
   if (!window) return { list: sessions, from: null, to: null };
   return { list: sessions.filter((s) => s.start && s.start >= window.from && s.start < window.to), from: window.from, to: window.to };
 }
 
 /**
- * `window` is the sprint under review ({ from, to, current, rolling }, from sprintWindows);
- * `calendar` is the configured sprint calendar or null (rolling 14 days).
+ * `window` is the period under review ({ from, to, current }, from periodWindows);
+ * `cycle` is the configured review cycle, or null for calendar months.
  */
-export function buildRetro(analysis, sessions, previous = null, window = null, calendar = null) {
+export function buildRetro(analysis, sessions, previous = null, window = null, cycle = null) {
   const a = analysis;
-  const { list, from, to } = sprintSessions(sessions, window);
-  const iso = (t) => (t ? localDate(t) : null); // local calendar day, like the sprint calendar
+  const { list, from, to } = periodSessions(sessions, window);
+  const iso = (t) => (t ? localDate(t) : null); // local calendar day, like the period boundaries
+  const unit = cycle ? 'cycle' : 'month';
   const recs = a.recommendations || [];
 
-  // Sprint card
+  // Period card
   const byTask = {};
   for (const s of list) byTask[s.task.primary] = (byTask[s.task.primary] || 0) + 1;
   const [topTask, topN] = Object.entries(byTask).sort((x, y) => y[1] - x[1])[0] || ['other', 0];
@@ -59,7 +59,7 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   };
 
   // Went well
-  const trendNote = !a.trend ? '' : a.trend.mode === 'sprint' ? 'This sprint against the previous one.' : a.trend.mode === 'split' ? `Before and after ${a.trend.boundary.slice(0, 10)}.` : `Last ${a.trend.days} days against the ${a.trend.days} before.`;
+  const trendNote = !a.trend ? '' : a.trend.mode === 'period' ? `${a.trend.period || 'This period'} against the ${unit} before.` : a.trend.mode === 'split' ? `Before and after ${a.trend.boundary.slice(0, 10)}.` : `Last ${a.trend.days} days against the ${a.trend.days} before.`;
   const wentWell = [];
   const trend = a.trend ? Object.entries(a.trend.metrics) : [];
   for (const [key, m] of trend) if (m.verdict === 'better') wentWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
@@ -92,10 +92,9 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
 
   // Kaizen: one experiment, and the review of the last saved retro
   const exp = actions.find((x) => x.metric);
-  const today = iso(Date.now());
   const kaizen = {
-    experiment: exp ? { title: exp.title, metric: exp.metric, days: calendar ? calendar.days : SPRINT_DAYS,
-      check: calendar ? 'agent-retro --retro at the end of next sprint' : `agent-retro --split ${today}` } : null,
+    experiment: exp ? { title: exp.title, metric: exp.metric, span: cycle ? `${cycle.days} days` : 'month',
+      check: `agent-retro --retro at the end of next ${unit}` } : null,
     review: previous ? {
       savedAt: previous.savedAt,
       items: (previous.actions || []).map((p) => {
@@ -111,15 +110,18 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   const hurt = (a.findings || []).find((f) => f.level === 'attention' && DRAG[f.id]) || null;
   const worse = trend.find(([k, m]) => m.verdict === 'worse' && DRAG[k]);
   const good = better ? WIN[better[0]] : null;
-  const bad = hurt ? DRAG[hurt.id] : worse ? DRAG[worse[0]] : null;
-  const verdict = !list.length ? 'No sessions in this sprint yet' : good && bad ? `${good}, but ${bad}` : good || (bad ? bad.charAt(0).toUpperCase() + bad.slice(1) : 'A steady sprint');
+  const bad = hurt ? (hurt.id === 'context-source' && hurt.source ? `${hurt.source} crowds your context` : DRAG[hurt.id]) : worse ? DRAG[worse[0]] : null;
+  const thin = list.length < MIN_PERIOD_SESSIONS;
+  const verdict = !list.length ? `No sessions this ${unit} yet`
+    : thin ? `${list.length} session${list.length === 1 ? '' : 's'} so far: too few to judge this ${unit}`
+    : good && bad ? `${good}, but ${bad}` : good || (bad ? bad.charAt(0).toUpperCase() + bad.slice(1) : `A steady ${unit}`);
   const headline = !list.length ? 'No sessions in this period yet.'
     : `${list.length} session${list.length === 1 ? '' : 's'}${card.spend ? `, $${card.spend.toFixed(0)}` : ''} and ${card.agentHours.toFixed(0)} h of agent work, mostly ${/^[A-Z][a-z]/.test(taskLabel) ? taskLabel.charAt(0).toLowerCase() + taskLabel.slice(1) : taskLabel}.`
       + (win ? ` Biggest win: ${win.text.charAt(0).toLowerCase() + win.text.slice(1)}.` : '') + (drag ? ` Biggest drag: ${drag.text.charAt(0).toLowerCase() + drag.text.slice(1).replace(/\.$/, '')}.` : '');
 
   return {
-    period: { from: iso(from), to: iso(to ? to - 1 : null), days: from ? Math.round((to - from) / 864e5) : null, current: !!(window && window.current), calendar: !!calendar },
-    card, headline, verdict,
+    period: { name: periodName(window, cycle), unit, from: iso(from), to: iso(to ? to - 1 : null), days: from ? Math.round((to - from) / 864e5) : null, current: !!(window && window.current) },
+    card, headline, verdict, thin,
     wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), start: start.slice(0, MAX), stop: stop.slice(0, MAX),
     actions, kaizen,
   };

@@ -533,7 +533,7 @@ export function compareMetric(key, before, after) {
 }
 
 // ---------------------------------------------------------------------------
-// Sprints — the calendar the retro and its trend follow
+// Review periods — calendar months by default, or a custom cycle; the retro and its trend follow them
 // ---------------------------------------------------------------------------
 const DAY = 864e5;
 /** ms → "2026-09-16" in local time. (toLocaleDateString('en-CA') is not reliable: some Node builds print 9/16/2026.) */
@@ -541,62 +541,70 @@ export const localDate = (t) => { const d = new Date(t); return `${d.getFullYear
 /** "2026-09-16" → local midnight of that day, in ms. */
 export const localDay = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
 
+/** Fewer sessions than this in a period is too little to judge it. */
+export const MIN_PERIOD_SESSIONS = 5;
+
 /**
- * Sprint windows [from, to), newest first. With a calendar ({ start: 'YYYY-MM-DD', days }) they
- * repeat every `days` from `start` (any past sprint start will do), and the first is the sprint
- * in progress at `now`. Without one there is a single rolling window: the `days` before the newest
- * session. Each window also counts its sessions.
+ * Review periods [from, to), newest first; the first is the one in progress at `now`. Without a
+ * cycle they are calendar months. With a cycle ({ start: 'YYYY-MM-DD', days }) they repeat every
+ * `days` from `start` (any past cycle start will do). They reach back to the earliest session
+ * (at least `count` periods, at most two years), and each counts its sessions.
+ * Boundaries step in calendar days (new Date(y, m, d + n)), so they stay at local midnight across DST.
  */
-export function sprintWindows(sessions, calendar, { now = Date.now(), days = 14, count = 8 } = {}) {
+export function periodWindows(sessions, cycle, { now = Date.now(), count = 6 } = {}) {
   const starts = sessions.filter((s) => s.start).map((s) => s.start);
   const countIn = (from, to) => starts.filter((t) => t >= from && t < to).length;
-  if (!calendar) {
-    if (!starts.length) return [];
-    const to = Math.max(...starts) + 1;
-    return [{ from: to - days * DAY, to, current: false, rolling: true, sessions: countIn(to - days * DAY, to) }];
+  const earliest = starts.length ? Math.min(...starts) : now;
+  const today = new Date(now);
+  let edge;
+  if (!cycle) {
+    edge = (i) => new Date(today.getFullYear(), today.getMonth() - i, 1).getTime(); // start of the i-th month back
+  } else {
+    const [y, m, d] = String(cycle.start).split('-').map(Number);
+    const todayIdx = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(y, m - 1, d)) / DAY);
+    const k = Math.floor(todayIdx / cycle.days);
+    edge = (i) => new Date(y, m - 1, d + (k - i) * cycle.days).getTime();
   }
-  // Step in calendar days (new Date(y, m, d + n)) so boundaries stay at local midnight across DST changes.
-  const [y, m, d] = String(calendar.start).split('-').map(Number);
-  const dayStart = (offset) => new Date(y, m - 1, d + offset).getTime();
-  const today = new Date(now); const todayIdx = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(y, m - 1, d)) / DAY);
-  const k = Math.floor(todayIdx / calendar.days);
-  // reach back to the earliest session (at least `count` sprints, at most two years)
-  const back = starts.length ? Math.ceil((now - Math.min(...starts)) / (calendar.days * DAY)) + 1 : count;
-  const n = Math.min(Math.max(count, back), Math.ceil(730 / calendar.days));
   const out = [];
-  for (let i = 0; i < n; i++) {
-    const from = dayStart((k - i) * calendar.days), to = dayStart((k - i + 1) * calendar.days);
-    out.push({ from, to, current: i === 0, rolling: false, sessions: countIn(from, to) });
+  for (let i = 0; i < (cycle ? Math.ceil(730 / cycle.days) : 24); i++) {
+    const from = edge(i), to = edge(i - 1);
+    if (i >= count && to <= earliest) break;
+    out.push({ from, to, current: i === 0, sessions: countIn(from, to) });
   }
   return out;
 }
 
-/** The sprint a retro reviews by default: the last completed one, or the current one if nothing is completed yet. */
-export function defaultSprint(windows) {
-  if (!windows.length) return null;
-  if (windows[0].rolling) return windows[0];
-  return windows.find((w) => !w.current && w.sessions) || windows[0];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** A period's name: "September 2026" for a month, "2026-09-16 → 2026-09-29" for a cycle. */
+export function periodName(w, cycle) {
+  if (!w) return 'all sessions';
+  if (!cycle) { const d = new Date(w.from); return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
+  return `${localDate(w.from)} → ${localDate(w.to - 1)}`;
+}
+
+/** The period a retro reviews by default: the last completed one with sessions, or the current one. */
+export function defaultPeriod(windows) {
+  return windows.find((w) => !w.current && w.sessions) || windows[0] || null;
 }
 
 /**
  * Compare two periods and return per-metric verdicts, or null unless both hold `minSessions`.
  *  - split (ms): before = sessions starting earlier, after = the rest;
- *  - window ({ from, to }): that window against the equally long one just before it.
+ *  - window + previous ({ from, to } each): the period against the one before it.
  */
-export function comparePeriods(sessions, { split = null, window = null, minSessions = 3 } = {}) {
+export function comparePeriods(sessions, { split = null, window = null, previous = null, minSessions = 3 } = {}) {
   const dated = sessions.filter((s) => s.start);
-  if (!dated.length || (!split && !window)) return null;
-  const len = window ? window.to - window.from : 0;
-  const boundary = split || window.from;
-  const before = dated.filter((s) => s.start < boundary && (split || s.start >= boundary - len));
-  const after = dated.filter((s) => s.start >= boundary && (split || s.start < window.to));
+  if (!dated.length || (!split && !(window && previous))) return null;
+  const inside = (w) => (s) => s.start >= w.from && s.start < w.to;
+  const before = split ? dated.filter((s) => s.start < split) : dated.filter(inside(previous));
+  const after = split ? dated.filter((s) => s.start >= split) : dated.filter(inside(window));
   if (before.length < minSessions || after.length < minSessions) return null;
   const metrics = {};
   for (const key of Object.keys(TREND_METRICS)) {
     const c = compareMetric(key, TREND_METRICS[key].of(before), TREND_METRICS[key].of(after));
     if (c) metrics[key] = c;
   }
-  return { boundary: new Date(boundary).toISOString(), mode: split ? 'split' : window.rolling ? 'rolling' : 'sprint', days: split ? null : Math.round(len / DAY), sessions: { before: before.length, after: after.length }, metrics };
+  return { boundary: new Date(split || window.from).toISOString(), mode: split ? 'split' : 'period', sessions: { before: before.length, after: after.length }, metrics };
 }
 
 // ---------------------------------------------------------------------------

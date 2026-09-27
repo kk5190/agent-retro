@@ -30,8 +30,8 @@ From a clone: `node agent-retro.mjs …` takes the same flags.
 `--demo` never reads your logs. It writes synthetic sessions to a temporary directory, which is
 also where the screenshots below come from.
 
-![Home: a one-line verdict, five areas with a status, a peek at the one you pick, what to do next and whether last sprint's changes worked](docs/images/home.jpg)
-![Your agent retro: sprint card and Went well / Didn't go well / Start / Stop](docs/images/retro.jpg)
+![Home: a one-line verdict, five areas with a status, a peek at the one you pick, what to do next and whether last month's changes worked](docs/images/home.jpg)
+![Your monthly retro: period card and Went well / Didn't go well / Start / Stop](docs/images/retro.jpg)
 ![Action items with fixes, and Kaizen reviewing the last saved retro](docs/images/retro-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
 ![Extensions: plugins, skills, MCP servers and hooks, loaded versus used](docs/images/extensions.jpg)
@@ -84,45 +84,45 @@ The rules are the `TASKS` table in `sessions.mjs`, one row per task. See
 
 ## The retro
 
-The dashboard opens with a sprint retrospective of your agent use over the last 14 days of
-activity, in the format many teams already use:
+The retro is a personal review of one period of your agent use, a calendar month by default,
+compared with the month before:
 
-- **Sprint card:** sessions, spend, agent hours, main task, and a one-line verdict ("biggest win,
-  biggest drag").
-- **Went well:** metrics that improved on the previous sprint, prompt practices that work for
-  you, clean risk signals.
+- **Period card:** sessions, spend, agent hours, main task, and a one-line verdict ("biggest win,
+  biggest drag"). With fewer than 5 sessions it says there are too few to judge, rather than
+  drawing conclusions from noise.
+- **Went well:** metrics that improved on the month before, prompt practices that work for you,
+  clean risk signals.
 - **Didn't go well:** the patterns worth acting on, and metrics that got worse.
 - **Start / Stop:** the recommendations, split into habits to add and things to remove.
 - **Action items:** the top three changes, each with a fix to paste and the metric to watch.
 - **Kaizen:** one measured experiment. **Save this retro** (or `--save-retro`), and the next
   retro reviews each saved action item: baseline → now, better or worse.
 
-**Your sprint calendar.** By default a sprint is the last 14 days of activity. To follow your
-team's real sprints, give any sprint's first day and the length: for example, two-week sprints
-starting on Wednesdays. You can do this under *Settings* in the dashboard, or:
+**Review periods.** Periods are calendar months. The retro reviews the last **completed** month
+and compares it with the one before; `--period <date>` reviews the period containing any date.
+If your work runs in fixed cycles instead, give any cycle's first day and its length, under
+*Settings* in the dashboard or:
 
 ```bash
-npx agent-retro --sprint-start 2026-09-16 --sprint-days 14 --save-sprint
+npx agent-retro --cycle-start 2026-09-16 --cycle-days 14 --save-cycle   # two-week cycles
+npx agent-retro --save-cycle                                            # back to calendar months
 ```
 
-Once a calendar is set:
-- The retro reviews the last **completed** sprint and compares it with the one before.
-- `--sprint <date>` selects any earlier sprint.
-- The setting is saved in `~/.agent-retro/config.json`.
+The setting is saved in `~/.agent-retro/config.json`.
 
-**One time period for everything.** The dashboard's *This sprint / Last sprint / All time* switch
-sets the period for every page, and sessions count in the sprint they started in. On the command
-line, `--scope sprint|last|all` does the same (all is the default).
+**One time period for everything.** The dashboard's *This month / Last month / All time* switch
+sets the period for every page, and sessions count in the period they started in. On the command
+line, `--scope current|last|all` does the same (all is the default).
 
-To post it to a team channel as markdown:
+To keep it as markdown, in your notes or next to the code:
 
 ```bash
 npx agent-retro --retro --md
 ```
 
 Saved retros live in `~/.agent-retro/retros/`. They hold action ids and metric baselines only,
-never prompt text. `get_retro` on the MCP server returns the same retro, for "summarize my last
-sprint" in Claude Code.
+never prompt text. `get_retro` on the MCP server returns the same retro, for "how did my agent use go
+last month?" in Claude Code.
 
 ## Prompt practices
 
@@ -178,7 +178,7 @@ the export.
 - **Repeated command sequences.** Runs of 3–5 shell commands that recur in 3 or more sessions.
   They are candidates for a script or a saved command. Runs that only look around (grep, cat, ls)
   are skipped.
-- **Before/after.** Key metrics for the last 14 days against the 14 before. To measure a specific
+- **Before/after.** Key metrics for the reviewed month against the month before. To measure a specific
   change, use `--split 2026-09-20` (the date you made it). Each recommendation shows the metric it
   aims to move.
 - **Correct a label.** Use the dashboard's session panel, or run
@@ -245,7 +245,7 @@ claude mcp add agent-retro -- node /path/to/agent-retro.mjs --mcp --all-agents
 | `get_session` | One record by id |
 | `get_task_profile` | One task's stats plus the ids of its costliest and longest sessions |
 | `get_recommendations` | The recommendations above, with evidence and fixes, for the agent to present to you |
-| `get_retro` | The sprint retro: card, Went well / Didn't go well / Start / Stop, action items and Kaizen |
+| `get_retro` | The retro for one period: card, Went well / Didn't go well / Start / Stop, action items and Kaizen |
 | `get_extensions` | Plugins, skills, MCP servers, hooks and slash commands, optionally filtered by kind or verdict |
 
 It speaks JSON-RPC 2.0 over stdio with no SDK dependency. It serves exactly the same views as the
@@ -279,15 +279,15 @@ npx agent-retro --ui --open         # http://127.0.0.1:4173
 
 The dashboard (`ui/index.html`) is self-contained, loads no external assets, listens on localhost
 only, and follows your system's light or dark setting. The header has the pages, one time-period
-switch (this sprint, last sprint, all time) and a Settings menu for the agent, project and sprint
-calendar.
+switch (this month, last month, all time) and a Settings menu for the agent, project and review
+period.
 
 - **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
   areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
   to peek at its chart without leaving Home. *What should I change?* The top three changes, each
   with a fix to copy. *Is it working?* How the action items from your last saved retro moved.
-- **Retro.** The sprint card, Went well / Didn't go well / Start / Stop, action items and Kaizen,
-  then every recommendation with its fix and the metrics compared with the sprint before.
+- **Retro.** The period card, Went well / Didn't go well / Start / Stop, action items and Kaizen,
+  then every recommendation with its fix and the metrics compared with the month before.
 - **Work.** Tasks with per-session medians (select one to list its sessions, or open its
   playbook), how sessions go, and what the agent does: tools, why they fail, shell commands and
   repeated sequences.
@@ -299,8 +299,8 @@ calendar.
   openings that could say more.
 - **Sessions.** Search, filter and sort every session, with a detail panel where you can correct
   its task label.
-- **Share this sprint** turns the retro into a short report, with a button that copies it as
-  markdown for a team channel.
+- **Summary** turns the retro into a short report to read, with a button that copies it as
+  markdown.
 
 Every page and section is a link (`#cost`, `#extensions`, …).
 A collapsed "More detail" section holds agents compared, models, projects and typed slash commands.
@@ -370,8 +370,9 @@ Vendor formats change without notice. There are four layers of defense:
 --label-accuracy               how often the rules agree with your corrections
 --demo                         synthetic data instead of your logs
 --retro [--md]  --save-retro   print only the retro (paste-ready with --md); save it for the next review
---sprint-start <date> --sprint-days <n> [--save-sprint]   your sprint calendar
---sprint <date>                review the sprint containing <date>
+--period <date>                review the period (month) containing <date>
+--scope current|last|all       limit the whole analysis to one period
+--cycle-start <date> --cycle-days <n> --save-cycle   review in fixed cycles instead of months
 --scan  --list-agents  --doctor  --errors
 ```
 

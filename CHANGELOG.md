@@ -13,10 +13,10 @@
   - estimated context sources and compactions
   - working and waiting time
   - risk signals
-- **Sprint calendar** (start day plus length, e.g. two-week sprints starting Wednesdays): the
-  retro reviews the last completed sprint against the one before, with a picker for earlier
-  sprints. An *All sessions* overview covers everything in view.
-- **Sprint retro:** a sprint card; Went well / Didn't go well / Start / Stop; action items with
+- **Review periods:** calendar months by default, or fixed cycles (a start day plus a length).
+  The retro reviews the last completed period against the one before; fewer than 5 sessions is
+  reported as too few to judge.
+- **Personal retro:** a period card; Went well / Didn't go well / Start / Stop; action items with
   fixes and the metric to watch; and Kaizen, with a review of the last saved retro. Available in
   the dashboard, as `--retro [--md]`, as `--save-retro`, and through the MCP tool `get_retro`.
 - **Recommendations:** evidence-backed rules, each with a fix you can paste:
@@ -34,14 +34,13 @@
   loaded versus used.
 - **Prompt practices:** zero-, one- and few-shot shares, techniques, and practices compared with
   your own session outcomes.
-- **Before/after trends:** the last 14 days against the 14 before, or around a date with
+- **Before/after trends:** the reviewed period against the one before, or around a date with
   `--split <date>`.
 - **Local dashboard, reports and exports:**
   - a dashboard with a Home page (verdict, five areas with a status and a peek, what to do next,
-    whether last sprint's changes worked), focused pages for the retro, work, cost, setup, habits
-    and sessions, one time-period switch (this sprint, last sprint, all time), and a shareable
-    sprint digest
-  - `--scope sprint|last|all` to limit the whole analysis to one sprint
+    whether last month's changes worked), focused pages for the retro, work, cost, setup, habits
+    and sessions, one time-period switch (this month, last month, all time), and a summary page
+  - `--scope current|last|all` to limit the whole analysis to one period
   - terminal and markdown reports
   - a redacted, versioned export (`--export`, `--sessions`, `--text none|excerpts|full`)
   - an MCP server (`--mcp`)

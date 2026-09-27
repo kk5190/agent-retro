@@ -655,7 +655,7 @@
                 "actions",
                 "kaizen"
               ],
-              "description": "The analysis as a sprint retrospective (last 14 days of activity).",
+              "description": "The analysis as a personal retrospective of one review period (a calendar month by default, or a configured cycle), compared with the period before.",
               "properties": {
                 "wentWell": {
                   "type": "array",

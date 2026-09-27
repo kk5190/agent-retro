@@ -516,13 +516,14 @@ test('cli: --demo runs on synthetic data and never reads the real home', () => {
   assert.match(r.stderr, /demo mode: 36 synthetic sessions/);
 });
 
-test('cli: --scope sprint keeps each in-sprint session whole, spend included', () => {
+test('cli: --scope last keeps each session of that month whole, spend included', () => {
   const run = (...args) => JSON.parse(spawnSync(process.execPath, [CLI, '--demo', '--json', ...args], { env: { ...process.env, AGENT_RETRO_HOME: '/nonexistent-home' }, encoding: 'utf8' }).stdout);
-  const sprint = run('--scope', 'sprint');
-  assert.equal(sprint.view.scope, 'sprint');
-  assert.ok(sprint.sessions.count > 0 && sprint.sessions.count < 36);
-  assert.ok(sprint.cost.usd > 0, 'cost records carry no timestamp but belong to their session');
-  assert.ok(sprint.cost.usd < run().cost.usd);
+  const last = run('--scope', 'last'); // the demo spans three months, so last month is always full
+  assert.deepEqual([last.view.scope, last.view.unit], ['last', 'month']);
+  assert.ok(last.sessions.count > 0 && last.sessions.count < 36);
+  assert.ok(last.cost.usd > 0, 'cost records carry no timestamp but belong to their session');
+  assert.ok(last.cost.usd < run().cost.usd);
+  assert.equal(spawnSync(process.execPath, [CLI, '--demo', '--scope', 'sprint'], { encoding: 'utf8' }).status, 2, 'unknown scope');
 });
 
 test('retro: columns, caps, action metrics and the Kaizen review of a saved retro', async () => {
@@ -554,7 +555,7 @@ test('retro: columns, caps, action metrics and the Kaizen review of a saved retr
   assert.deepEqual(r.stop.map((x) => x.recId), ['check-ins', 'unused-mcp']);
   assert.equal(r.start[0].detail, 'Read text.');
   assert.deepEqual(r.actions.map((x) => x.id), ['screenshots', 'check-ins'], 'only recommendations with a fix');
-  assert.equal(r.actions[1].metric.display, '50%', 'ackRate of the sprint: 3 of 6 prompts');
+  assert.equal(r.actions[1].metric.display, '50%', 'ackRate of the period: 3 of 6 prompts');
   assert.equal(r.kaizen.review, null);
   assert.equal(r.kaizen.experiment.metric.key, 'ackRate', 'first action item with a measurable metric');
   const snap = retroSnapshot(r);
@@ -562,6 +563,9 @@ test('retro: columns, caps, action metrics and the Kaizen review of a saved retr
   const later = buildRetro(analysis, sessions, { ...snap, actions: [{ ...snap.actions[1], baseline: 0.8 }] });
   assert.deepEqual(later.kaizen.review.items[0], { title: 'Cut check-ins', metric: '“Continue” prompts', baseline: '80%', now: '50%', verdict: 'better', stillOpen: true });
   assert.equal(buildRetro({ recommendations: [], tasks: {}, prompting: { practices: [] } }, [], null).headline, 'No sessions in this period yet.');
+  assert.equal(r.thin, true, 'three sessions are too few to judge');
+  assert.match(r.verdict, /^3 sessions so far: too few to judge this month$/);
+  assert.equal(r.kaizen.experiment.span, 'month');
 });
 
 test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', () => {
@@ -576,38 +580,48 @@ test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', 
   assert.match(saved.stderr, /retro saved to .*agent-retro-demo-.*\.agent-retro\/retros\//, 'writes inside the demo home only');
 });
 
-test('sprints: a Wednesday calendar gives aligned windows; the retro reviews the last completed one', async () => {
-  const { buildSessions, sprintWindows, defaultSprint, comparePeriods, localDay } = await import('./sessions.mjs');
-  const now = localDay('2026-09-27') + 12 * 3600e3; // a Sunday
-  const cal = { start: '2026-09-02', days: 14 }; // a Wednesday
+test('periods: calendar months by default, compared with the month before', async () => {
+  const { buildSessions, periodWindows, defaultPeriod, comparePeriods, periodName, localDay, localDate: day } = await import('./sessions.mjs');
+  const now = localDay('2026-09-27') + 12 * 3600e3;
   const ev = [];
-  const add = (day, n) => { for (let i = 0; i < n; i++) { const sid = `${day}-${i}`; const ts = localDay(day) + (10 + i) * 3600e3; ev.push({ agent: 'x', sessionId: sid, ts, role: 'user', text: 'implement the reports page' }, { agent: 'x', sessionId: sid, ts: ts + 1000, role: 'assistant' }); } };
-  add('2026-08-25', 3); add('2026-09-08', 4); add('2026-09-20', 2);
+  const add = (d, n) => { for (let i = 0; i < n; i++) { const sid = `${d}-${i}`; const ts = localDay(d) + (10 + i) * 3600e3; ev.push({ agent: 'x', sessionId: sid, ts, role: 'user', text: 'implement the reports page' }, { agent: 'x', sessionId: sid, ts: ts + 1000, role: 'assistant' }); } };
+  add('2026-07-10', 3); add('2026-08-31', 4); add('2026-09-01', 2);
   const sessions = buildSessions(ev);
-  const w = sprintWindows(sessions, cal, { now, count: 3 });
-  const { localDate: day } = await import('./sessions.mjs');
-  assert.deepEqual(w.slice(0, 3).map((x) => [day(x.from), day(x.to - 1), x.current, x.sessions]), [
-    ['2026-09-16', '2026-09-29', true, 2], ['2026-09-02', '2026-09-15', false, 4], ['2026-08-19', '2026-09-01', false, 3]]);
-  assert.equal(new Date(w[1].from).getDay(), 3, 'sprints start on Wednesday');
-  assert.equal(defaultSprint(w), w[1], 'last completed sprint');
-  const t = comparePeriods(sessions, { window: w[1] });
-  assert.deepEqual([t.mode, t.days, t.sessions.before, t.sessions.after], ['sprint', 14, 3, 4]);
-  const rolling = sprintWindows(sessions, null);
-  assert.equal(rolling.length, 1);
-  assert.equal(rolling[0].rolling, true);
+  const w = periodWindows(sessions, null, { now, count: 2 });
+  assert.deepEqual(w.map((x) => [day(x.from), day(x.to - 1), x.current, x.sessions]), [
+    ['2026-09-01', '2026-09-30', true, 2], ['2026-08-01', '2026-08-31', false, 4], ['2026-07-01', '2026-07-31', false, 3]], 'reaches back to the earliest session');
+  assert.equal(periodName(w[1], null), 'August 2026');
+  assert.equal(defaultPeriod(w), w[1], 'last completed month');
+  const t = comparePeriods(sessions, { window: w[1], previous: w[2] });
+  assert.deepEqual([t.mode, t.sessions.before, t.sessions.after], ['period', 3, 4], 'July (31 days) against August (31 days), unequal lengths allowed');
+  assert.equal(comparePeriods(sessions, { window: w[0], previous: w[1] }), null, 'two sessions are too few to compare');
 });
 
-test('cli: --sprint-start/--save-sprint set the calendar; --sprint picks a window', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-sprint-'));
+test('periods: a custom cycle gives aligned windows', async () => {
+  const { buildSessions, periodWindows, localDay, localDate: day } = await import('./sessions.mjs');
+  const now = localDay('2026-09-27') + 12 * 3600e3; // a Sunday
+  const ev = [{ agent: 'x', sessionId: 's', ts: localDay('2026-08-25'), role: 'user', text: 'implement the reports page' }];
+  const w = periodWindows(buildSessions(ev), { start: '2026-09-02', days: 14 }, { now, count: 3 });
+  assert.deepEqual(w.slice(0, 3).map((x) => [day(x.from), day(x.to - 1), x.current]), [
+    ['2026-09-16', '2026-09-29', true], ['2026-09-02', '2026-09-15', false], ['2026-08-19', '2026-09-01', false]]);
+  assert.equal(new Date(w[1].from).getDay(), 3, 'cycles start on the chosen weekday');
+});
+
+test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back to months; --period picks one', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-cycle-'));
   writeFixtures(home); // the Claude fixture sessions fall on 2026-03-01
   const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8' });
-  assert.equal(run('--sprint-start', 'wednesday').status, 2, 'dates only');
-  const saved = run('--sprint-start', '2026-02-25', '--sprint-days', '14', '--save-sprint', '--retro');
+  const cfg = () => JSON.parse(fs.readFileSync(path.join(home, '.agent-retro', 'config.json'), 'utf8'));
+  assert.equal(run('--cycle-start', 'wednesday').status, 2, 'dates only');
+  const saved = run('--cycle-start', '2026-02-25', '--cycle-days', '14', '--save-cycle', '--retro');
   assert.equal(saved.status, 0, saved.stderr);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, '.agent-retro', 'config.json'), 'utf8')).sprint, { start: '2026-02-25', days: 14 });
-  const picked = run('--retro', '--sprint', '2026-03-01');
+  assert.deepEqual(cfg().cycle, { start: '2026-02-25', days: 14 });
+  const picked = run('--retro', '--period', '2026-03-01');
   assert.equal(picked.status, 0, picked.stderr);
-  assert.match(picked.stdout, /RETRO · sprint 2026-02-25 → 2026-03-10/);
+  assert.match(picked.stdout, /RETRO · 2026-02-25 → 2026-03-10/);
+  assert.equal(run('--save-cycle').status, 0);
+  assert.equal(cfg().cycle, undefined);
+  assert.match(run('--retro', '--period', '2026-03-01').stdout, /RETRO · March 2026/);
 });
 
 // --- regressions from the code review ------------------------------------------
@@ -646,8 +660,8 @@ test('review: a plugin disabled in settings is never recommended for disabling a
   assert.deepEqual([p.verdict, p.enabledKey], ['disabled', null]);
 });
 
-test('review: sprint windows stay on local midnight across daylight saving', () => {
-  const code = "import('./sessions.mjs').then((m) => { const w = m.sprintWindows([], { start: '2026-01-07', days: 14 }, { now: Date.parse('2026-11-20T12:00:00Z'), count: 24 }); console.log(w.filter((x) => new Date(x.from).getHours() || new Date(x.from).getDay() !== 3).length); })";
+test('review: period windows stay on local midnight across daylight saving', () => {
+  const code = "import('./sessions.mjs').then((m) => { const now = Date.parse('2026-11-20T12:00:00Z'); const c = m.periodWindows([], { start: '2026-01-07', days: 14 }, { now, count: 24 }); const mo = m.periodWindows([], null, { now, count: 12 }); console.log(c.filter((x) => new Date(x.from).getHours() || new Date(x.from).getDay() !== 3).length + mo.filter((x) => new Date(x.from).getHours() || new Date(x.from).getDate() !== 1).length); })";
   for (const TZ of ['America/New_York', 'Europe/Berlin']) {
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, TZ }, encoding: 'utf8', cwd: path.dirname(CLI) });
     assert.equal(r.stdout.trim(), '0', `${TZ}: ${r.stderr}`);
