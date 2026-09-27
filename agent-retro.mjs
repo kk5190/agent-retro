@@ -397,6 +397,10 @@ export function analyze(data, o, sessionRecords = []) {
     byModel: Object.fromEntries(Object.entries(costByModel).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [k, +v.toFixed(2)])),
     sessions: claudeCost.size,
   };
+  // Claude logs cost per session without a time, so a session's spend counts on the day it started
+  const spendByDay = {};
+  for (const s of sessionRecords) { const b = s.costUsd && bucketedTs(s.start, o.tz); if (b) spendByDay[b.key] = (spendByDay[b.key] || 0) + s.costUsd; }
+  cost.daily = Object.entries(spendByDay).map(([date, usd]) => ({ date, n: +usd.toFixed(2) })).sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const sortedCtx = contexts.slice().sort((a, b) => a - b);
   const context = {

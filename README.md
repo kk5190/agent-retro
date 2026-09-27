@@ -293,12 +293,12 @@ npx agent-retro --ui --open         # http://127.0.0.1:4173
 ```
 
 The dashboard (`ui/index.html`) is self-contained, loads no external assets, listens on localhost
-only, and follows your system's light or dark setting. The header has the pages, one time-period
-picker (any month, week or day with sessions, or all time) and a Settings menu for the agent, project and review
-period.
+only, and follows your system's light or dark setting. The pages are in a side rail (a row of
+tabs on a phone); the header has one period picker (any month, week or day with sessions, or all
+time) and a Settings menu for the agent, project and review period.
 
-- **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
-  areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
+- **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, the period's
+  numbers and spend per day, then five areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
   to peek at its chart without leaving Home. *Your next step:* the change with the most impact, with
   a fix to copy. *Is it working?* How many changes from your last saved review moved the right way.
 - **Review.** The period card; Went well / Didn't go well / Did it work?; then What to change,

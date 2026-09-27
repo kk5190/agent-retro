@@ -650,6 +650,10 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   assert.equal(march.scope, 'period'); assert.equal(march.from, '2026-03-01'); assert.equal(march.to, '2026-03-31');
   assert.equal(view('--period', '2026-01-15').from, '2026-01-01', 'any month with sessions, not only the last two');
   assert.equal(view('--period', '2026-03-15', '--scope', 'all').scope, 'all');
+  // spend per day: each session's cost on the day it started, adding up to the total
+  const a = JSON.parse(run('--json', '--all-agents').stdout);
+  assert.equal(+a.cost.daily.reduce((x, d) => x + d.n, 0).toFixed(2), a.cost.usd);
+  assert.ok(a.cost.daily.every((d, i, l) => !i || l[i - 1].date < d.date), 'sorted by day');
 });
 
 test('editing: blind edits, rewrites, rework and what you interrupted, per thread', () => {
