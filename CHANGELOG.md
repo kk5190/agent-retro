@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- A shorter README; the full reference moves to `docs/guide.md`.
+- README images load on npm (absolute URLs), in the dark theme.
+- `package.json` links the repository, homepage and issue tracker.
+
 ## 0.1.0 — first public release
 
 - **Session telemetry:** every coding-agent session becomes one record (schema v1). Each record

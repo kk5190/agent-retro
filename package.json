@@ -1,6 +1,6 @@
 {
   "name": "agent-retro",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Retrospectives for your coding-agent sessions: reads local Claude Code, Codex, pi, opencode, Continue, Zed and Cursor logs, finds what you work on and where tokens, time and failures go, and recommends concrete changes. Local dashboard, versioned export, MCP server.",
   "type": "module",
   "bin": {
