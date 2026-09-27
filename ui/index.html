@@ -249,7 +249,25 @@
   /* Recommendations ----------------------------------------------------------- */
   .recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
   .rec { min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: 20px 22px; }
-  .rec h3 { margin: 0 0 10px; font: 400 21px/1.25 var(--serif); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .rec h3 { margin: 0 0 10px; font: 400 21px/1.25 var(--serif); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .rec h3 .tags { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+  .rec .nx { font: 400 21px var(--serif); color: var(--ink-3); }
+  .rec.next:first-child .nx { color: var(--signal); }
+  .rec .kind { font: 600 10px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); background: var(--inset); border-radius: 999px; padding: 2px 8px; }
+  .rec .kind.start { color: var(--signal); background: var(--signal-soft); }
+  .watch { margin: -2px 0 12px; font-size: 13px; color: var(--ink-2); }
+  .watch b { font-weight: 600; color: var(--ink); }
+  .watch .exp { color: var(--signal); font-weight: 500; }
+  .watch code { font: 12px var(--mono); }
+  .more-recs { list-style: none; }
+  .more-recs summary { cursor: pointer; padding: 14px 4px; font: 400 20px var(--serif); }
+  .more-recs summary span { font: 400 13px var(--body); color: var(--ink-3); margin-left: 10px; }
+  .more-recs .recs { margin-top: 4px; }
+  .next-step > b { display: block; font: 400 22px/1.3 var(--serif); margin-bottom: 6px; }
+  .next-step p { margin: 0 0 10px; font-size: 13.5px; color: var(--ink-2); }
+  .next-step .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .tally { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; }
+  .tally span { margin-left: 10px; font: 400 34px/1 var(--display); letter-spacing: -0.035em; }
   .lvl { font: 600 10.5px var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--track); color: var(--ink-2); }
   .rec.high .lvl { background: var(--alert-soft); color: var(--alert); }
   .rec dl { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 14px; }
@@ -358,14 +376,7 @@
   .digest-bar { max-width: 780px; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .digest { max-width: 780px; margin: 0 auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 24px; padding: clamp(24px, 5vw, 52px) clamp(20px, 5vw, 60px); }
   .digest h2 { font: 400 clamp(30px, 4vw, 44px)/1.1 var(--serif); letter-spacing: -0.01em; margin: 12px 0 14px; }
-  .digest .lede { font: 400 18px/1.5 var(--serif); color: var(--ink-2); margin: 0; }
-  .digest .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 28px 0 8px; padding: 18px 0; border-block: 1px solid var(--rule); }
-  .digest .stats div { padding: 0 16px; border-left: 1px solid var(--rule); min-width: 0; }
-  .digest .stats div:first-child { padding-left: 0; border-left: 0; }
-  .digest .stats b { display: block; font: 400 30px/1.1 var(--display); letter-spacing: -0.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .digest .stats div > span { font-size: 12px; color: var(--ink-3); }
-  .digest .stats b.txt { font-size: 20px; line-height: 1.5; letter-spacing: -0.01em; white-space: normal; }
-  @media (max-width: 640px) { .digest .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; } .digest .stats div:nth-child(3) { padding-left: 0; border-left: 0; } }
+  .digest .lede { font: 400 18px/1.5 var(--serif); color: var(--ink-2); margin: 0 0 8px; }
   .digest h3 { display: flex; align-items: center; gap: 8px; font: 600 10.5px var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); margin: 34px 0 6px; }
   .digest h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--ink-3)); }
   .digest h3.good { --c: var(--good); } .digest h3.bad { --c: var(--alert); } .digest h3.change { --c: var(--signal); } .digest h3.next { --c: var(--ink); }
@@ -375,7 +386,8 @@
   .drow b { font-weight: 500; color: var(--ink); line-height: 1.4; }
   .drow span { color: var(--ink-3); font-size: 13px; }
   .drow .n { font: 400 19px/1.2 var(--serif); color: var(--ink-3); }
-  .drow:first-of-type .n { color: var(--signal); }
+  .drow .n { font-size: 17px; }
+  h3.change + .drow .n { color: var(--signal); }
   .drow .kind { justify-self: start; align-self: start; margin-top: 2px; }
   .drow.kinded { grid-template-columns: 54px minmax(0, 1fr); }
   .digest .tools { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--rule); }
@@ -386,7 +398,7 @@
   .card .nums div { padding: 0 20px; border-left: 1px solid var(--rule); min-width: 0; }
   .card .nums div:first-child { padding-left: 0; border-left: 0; }
   .card .nums div b { display: block; font: 400 34px/1.1 var(--display); letter-spacing: -0.035em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .card .nums div span { font-size: 12.5px; color: var(--ink-3); }
+  .card .nums div > span { font-size: 12.5px; color: var(--ink-3); }
   @media (max-width: 640px) { .card .nums { gap: 14px; } .card .nums div { border-left: 0; padding: 0; } }
   .card p { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--rule); font: 400 19px/1.45 var(--serif); color: var(--ink); max-width: 80ch; }
   .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -396,7 +408,8 @@
   .board .col h3 { margin: 0 0 12px; font: 600 10.5px var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
   .board .col h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
   .board .col h3 span { margin-left: auto; font: 400 22px var(--display); letter-spacing: -0.02em; color: var(--ink); }
-  .board .col.good { --c: var(--good); } .board .col.bad { --c: var(--alert); } .board .col.change { --c: var(--signal); }
+  .board .col.good { --c: var(--good); } .board .col.bad { --c: var(--alert); } .board .col.check { --c: var(--ink); }
+  .board .kz-item { display: flex; gap: 10px; }
   .note .kind, .digest .kind { display: inline-block; font: 600 10px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); background: var(--inset); border-radius: 999px; padding: 1px 8px; margin-right: 6px; vertical-align: 1px; }
   .note .kind.start, .digest .kind.start { color: var(--signal); background: var(--signal-soft); }
   .note { padding: 12px 0; border-top: 1px solid var(--rule); font-size: 13.5px; }
@@ -494,8 +507,8 @@
       <div class="areas" id="areas" role="list"></div>
       <div class="peek panel" id="peek" aria-live="polite"></div>
       <div class="grid g2 gap">
-        <div class="panel"><h3>Do next</h3><p class="hint">The changes with the most impact, from your own numbers. Each has a fix to paste.</p><ol class="actions" id="homeActions"></ol></div>
-        <div class="panel"><h3>Is it working?</h3><p class="hint">How the actions from your last saved review moved.</p><div id="homeFollowUp"></div></div>
+        <div class="panel"><h3>Your next step</h3><p class="hint">The change with the most impact, from your own numbers.</p><div id="homeNext"></div></div>
+        <div class="panel"><h3>Is it working?</h3><p class="hint">How the changes from your last saved review moved.</p><div id="homeFollowUp"></div></div>
       </div>
     </section>
   </div>
@@ -505,16 +518,12 @@
       <p id="scope">Reading your local agent logs…</p>
       <div class="card" id="periodCard"></div>
       <div class="board" id="board"></div>
-      <div class="grid g2 gap retro-foot">
-        <div class="panel"><h3>Do next</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol><div id="experiment"></div></div>
-        <div class="panel"><h3>Did it work?</h3><p class="hint">Save this review, and the next one shows how its actions moved: baseline → now.</p><div id="followUp"></div></div>
-      </div>
     </section>
 
     <section id="changes" class="part">
       <header>
         <h2>What to change</h2>
-        <p>Changes your own data supports, most impactful first. Each shows the evidence, what to do, and a fix you can paste. Nothing is applied for you.</p>
+        <p>Start with the numbered ones: each has a fix to paste and the number that will show next month whether it worked. The rest follow, most impactful first. Nothing is applied for you.</p>
       </header>
       <ol class="recs" id="recs"></ol>
       <div class="panel gap scroll">
@@ -931,22 +940,18 @@ function renderSummary(a, sessions) {
   if (!r) return;
   const c = r.card;
   $('periodCard').innerHTML = `<div class="nums">
-      <div><b>${fmt(c.sessions)}</b><span>sessions this ${esc(r.period.unit)}</span></div>
-      <div><b>${c.spend ? money(c.spend) : '—'}</b><span>recorded spend</span></div>
-      <div><b>${c.agentHours} h</b><span>of agent work</span></div>
+      <div><b>${numHtml(fmt(c.sessions))}</b><span>sessions this ${esc(r.period.unit)}</span></div>
+      <div><b>${numHtml(c.spend ? money(c.spend) : '—')}</b><span>recorded spend</span></div>
+      <div><b>${numHtml(c.agentHours + ' h')}</b><span>of agent work</span></div>
       <div><b>${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)} of sessions` : 'main task'}</span></div>
-    </div><p>${esc(r.headline)}</p>`;
-  const COLS = [['wentWell', 'Went well', 'good'], ['didntGoWell', "Didn't go well", 'bad'], ['change', 'Change', 'change']];
-  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${it.kind ? `<span class="kind ${it.kind}">${it.kind}</span>` : ''}${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this time.</p>'}</div>`).join('');
-  $('actions').innerHTML = r.actions.length ? r.actions.map((x, i) => `<li><b>${esc(x.title)}</b><button type="button" data-afix="${i}">Copy fix</button><small>${x.metric ? `Watch: ${esc(x.metric.label)}, now <strong>${esc(x.metric.display)}</strong>` : `Fix: ${esc(FIX_LABEL[x.fix.kind] || 'Fix')} ${esc(x.fix.target)}`}</small></li>`).join('') : '<p class="empty">No action items: nothing crossed a threshold.</p>';
-  $('actions').querySelectorAll('[data-afix]').forEach((b) => b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(r.actions[Number(b.dataset.afix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
-    setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
-  }));
-  const x = r.experiment, f = r.followUp;
-  $('experiment').innerHTML = x ? `<div class="kz-exp"><b>Experiment for the next ${esc(x.span)}:</b> ${esc(x.title)}.<br>Measure ${esc(x.metric.label)}, now <b>${esc(x.metric.display)}</b>. Check with <code>${esc(x.check)}</code>.</div>` : '';
-  $('followUp').innerHTML = (f ? `<div style="font-size:12.5px;color:var(--ink-3)">Since the review saved ${esc(dateStr(f.savedAt.slice(0, 10)))}</div>` + f.items.map((it) => `<div class="kz-item">${vdot(it.verdict)}<div><b>${esc(it.title)}</b>${it.metric ? `<br><span style="color:var(--ink-3);font-size:12.5px">${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('') : '<p class="empty">No saved review yet.</p>')
-    + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this review</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`;
+    </div><p>${esc(r.verdict)}.</p>`;
+  const f = r.followUp;
+  const col = (cls, title, count, body) => `<div class="col ${cls}"><h3>${title}<span>${count}</span></h3>${body}</div>`;
+  const notes = (list) => (list.length ? list.map((it) => `<div class="note"><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this time.</p>');
+  const checks = f ? `<p class="hint" style="margin:0 0 4px">Since the review saved ${esc(dateStr(f.savedAt.slice(0, 10)))}</p>` + f.items.map((it) => `<div class="note kz-item">${vdot(it.verdict)}<div><b>${esc(it.title)}</b>${it.metric ? `<span>${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('')
+    : '<p class="empty">No saved review yet. Save this one, and next month this column shows how its changes moved.</p>';
+  $('board').innerHTML = col('good', 'Went well', r.wentWell.length, notes(r.wentWell)) + col('bad', "Didn't go well", r.didntGoWell.length, notes(r.didntGoWell))
+    + col('check', 'Did it work?', f ? f.items.length : '', checks + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this review</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`);
   $('saveRetro').addEventListener('click', async () => {
     try { await postJson('/api/retro/save?' + query(), {}); $('saveStatus').textContent = 'Saved. The next review shows how these actions went.'; }
     catch (e) { $('saveStatus').textContent = 'Could not save: ' + e.message; }
@@ -966,17 +971,26 @@ function renderTrend(a) {
 
 /* ---- recommendations ---- */
 const FIX_LABEL = { settings: 'Merge into', shell: 'Run in', file: 'Create', 'claude-md': 'Add to', manual: 'In' };
-function renderRecs(a) {
-  const R = a.recommendations || [];
-  $('recs').innerHTML = R.length ? R.map((r, i) => `
-    <li class="rec ${esc(r.level)}" id="rec-${esc(r.id)}" tabindex="-1">
-      <h3><span class="lvl">${esc(r.level)}</span>${esc(r.title)}</h3>
+/** Where a recommendation sits in the review's Change list: its Do next number, kind and metric. */
+const changeOf = (a, id) => ((a.retro && a.retro.change) || []).find((it) => it.recId === id);
+function recCard(a, r) {
+  const c = changeOf(a, r.id) || {}, x = a.retro && a.retro.experiment;
+  return `<li class="rec ${esc(r.level)}${c.next ? ' next' : ''}" id="rec-${esc(r.id)}" tabindex="-1">
+      <h3>${c.next ? `<span class="nx">${String(c.next).padStart(2, '0')}</span>` : ''}${esc(r.title)}<span class="tags">${c.kind ? `<span class="kind ${esc(c.kind)}">${esc(c.kind)}</span>` : ''}<span class="lvl">${esc(r.level)}</span></span></h3>
+      ${c.metric ? `<p class="watch">Watch <b>${esc(c.metric.label)}</b>, now <b>${esc(c.metric.display)}</b>${c.experiment && x ? ` · <span class="exp">Experiment for the next ${esc(x.span)}</span>: check with <code>${esc(x.check)}</code>` : ''}</p>` : ''}
       <dl>${r.evidence ? `<dt>Why</dt><dd>${esc(r.evidence)}</dd>` : ''}<dt>Do</dt><dd>${esc(r.action)}</dd></dl>
       ${r.trend ? `<div class="trend">${esc(r.trend.label)}: <b>${fmtM(r.trend, r.trend.before)}</b> → <b>${fmtM(r.trend, r.trend.after)}</b> <span class="v-${r.trend.verdict}">${VERDICT[r.trend.verdict]}</span> <span style="color:var(--ink-3)">(${esc(trendWindow(a.trend))})</span></div>` : ''}
-      ${r.fix ? `<div class="fix"><div class="fix-bar">${esc(FIX_LABEL[r.fix.kind] || 'Fix')} <b>${esc(r.fix.target)}</b><button type="button" data-copy="${i}">Copy</button></div><pre>${esc(r.fix.content)}</pre></div>` : ''}
-    </li>`).join('') : '<li class="rec"><h3>Nothing to change for this selection.</h3><p class="empty">Recommendations need a few sessions of evidence. Widen the period.</p></li>';
+      ${r.fix ? `<div class="fix"><div class="fix-bar">${esc(FIX_LABEL[r.fix.kind] || 'Fix')} <b>${esc(r.fix.target)}</b><button type="button" data-copy="${esc(r.id)}">Copy</button></div><pre>${esc(r.fix.content)}</pre></div>` : ''}
+    </li>`;
+}
+function renderRecs(a) {
+  const R = a.recommendations || [];
+  const nx = (r) => (changeOf(a, r.id) || {}).next || 0;
+  const next = R.filter(nx).sort((p, q) => nx(p) - nx(q)), rest = R.filter((r) => !nx(r));
+  $('recs').innerHTML = !R.length ? '<li class="rec"><h3>Nothing to change for this selection.</h3><p class="empty">Recommendations need a few sessions of evidence. Widen the period.</p></li>'
+    : next.map((r) => recCard(a, r)).join('') + (rest.length ? `<li class="more-recs"><details${next.length ? '' : ' open'}><summary>${next.length ? `${rest.length} more change${rest.length === 1 ? '' : 's'}` : 'Changes'}<span>most impactful first</span></summary><ol class="recs">${rest.map((r) => recCard(a, r)).join('')}</ol></details></li>` : '');
   $('recs').querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(R[Number(b.dataset.copy)].fix.content); b.textContent = 'Copied'; }
+    try { await navigator.clipboard.writeText(R.find((r) => r.id === b.dataset.copy).fix.content); b.textContent = 'Copied'; }
     catch { b.textContent = 'Select and copy manually'; }
     setTimeout(() => { b.textContent = 'Copy'; }, 1600);
   }));
@@ -1513,7 +1527,7 @@ function renderHome(a) {
   const tracked = Object.keys(t).length;
   kpis('homeKpis', [
     ['sessions', fmt(a.sessions.count), `median ${a.sessions.medianMinutes || 0} minutes long`],
-    ['recorded spend', a.cost.usd ? '$' + Math.round(a.cost.usd).toLocaleString() : '—', a.cost.usd && a.sessions.count ? `${money(a.cost.usd / a.sessions.count)} per session` : 'no cost in the logs'],
+    ['recorded spend', a.cost.usd ? '$' + Math.round(a.cost.usd).toLocaleString() : '—', a.cost.usd ? 'from the agents\' cost logs' : 'no cost in the logs'],
     ['agent working', `${hours.toFixed(1)} h`, 'time between its actions'],
     all || !a.trend ? ['tool calls', fmtN(a.volume.toolCalls || 0), `${fmt(a.volume.toolCalls ? Math.round(a.volume.toolCalls / Math.max(1, a.sessions.count)) : 0)} per session`]
       : ['metrics better', `${better}/${tracked}`, `${worse} worse than the ${UNIT} before`],
@@ -1529,15 +1543,22 @@ function renderHome(a) {
       <span class="body">${ar.frac != null ? `${gaugeSvg(ar.frac)}<span class="v">${numHtml(ar.v)}</span>` : `<span class="v flat">${numHtml(ar.v)}</span>`}</span><span class="s">${esc(ar.s)}</span></button>`).join('');
   $('areas').querySelectorAll('.area').forEach((b) => b.addEventListener('click', () => { PEEK = b.dataset.area; renderPeek(a); }));
   renderPeek(a);
-  const recs = (a.recommendations || []).slice(0, 3);
-  $('homeActions').innerHTML = recs.length ? recs.map((x, i) => `<li><b>${esc(x.title)}</b>${x.fix ? `<button type="button" data-hfix="${i}">Copy fix</button>` : `<a href="#rec-${esc(x.id)}" style="font-size:12.5px">How</a>`}<small>${esc(firstSentence(x.evidence || x.action))}</small></li>`).join('') : '<p class="empty">Nothing crossed a threshold. Keep going.</p>';
-  $('homeActions').querySelectorAll('[data-hfix]').forEach((b) => b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(recs[Number(b.dataset.hfix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
-    setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
-  }));
-  const f = r ? r.followUp : null, x = r ? r.experiment : null;
-  $('homeFollowUp').innerHTML = f ? f.items.map((it) => `<div class="kz-line">${vdot(it.verdict)}<div><b>${esc(it.title)}</b><br><span style="color:var(--ink-3);font-size:12.5px">${it.metric ? `${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)}` : 'not measured'}</span></div></div>`).join('') + '<p style="margin:14px 0 0"><a class="panel-link" href="#review-board">Full review ↗</a></p>'
-    : `<p class="empty">No saved review yet. Open the <a href="#review-board">review</a> and choose “Save this review”; next ${UNIT} this box shows what changed.</p>${x ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(x.title)}</b> (${esc(x.metric.label)}, now ${esc(x.metric.display)}).</p>` : ''}`;
+  const R = a.recommendations || [];
+  const first = R.find((x) => (changeOf(a, x.id) || {}).next === 1) || R[0];
+  const c1 = first ? changeOf(a, first.id) || {} : {};
+  $('homeNext').innerHTML = first ? `<div class="next-step"><b>${esc(first.title)}</b><p>${esc(firstSentence(first.evidence || first.action))}</p>
+      ${c1.metric ? `<p class="watch">Watch <b>${esc(c1.metric.label)}</b>, now <b>${esc(c1.metric.display)}</b></p>` : ''}
+      <div class="row">${first.fix ? '<button type="button" class="primary" id="homeFix">Copy fix</button>' : ''}<a class="panel-link" href="#rec-${esc(first.id)}">${R.length > 1 ? `All ${R.length} changes` : 'Details'} ↗</a></div></div>`
+    : '<p class="empty">Nothing crossed a threshold. Keep going.</p>';
+  if ($('homeFix')) $('homeFix').addEventListener('click', async (e) => {
+    try { await navigator.clipboard.writeText(first.fix.content); e.target.textContent = 'Copied'; } catch { e.target.textContent = 'Copy failed'; }
+    setTimeout(() => { e.target.textContent = 'Copy fix'; }, 1600);
+  });
+  const f = r ? r.followUp : null;
+  const n = (v) => (f ? f.items.filter((it) => it.verdict === v).length : 0);
+  $('homeFollowUp').innerHTML = f
+    ? `<p class="tally">${f.items.map((it) => vdot(it.verdict)).join('')}<span>${numHtml(`${n('better')} of ${f.items.length}`)}</span></p><p class="hint" style="margin:6px 0 14px">changes from the review saved ${esc(dateStr(f.savedAt.slice(0, 10)))} moved the right way${n('worse') ? `; ${n('worse')} moved the wrong way` : ''}.</p><a class="panel-link" href="#review-board">See which ↗</a>`
+    : `<p class="empty">No saved review yet. Open the <a href="#review-board">review</a> and choose “Save this review”; next ${UNIT} this box shows whether its changes worked.</p>`;
 }
 const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
 
@@ -1547,19 +1568,12 @@ function renderDigest(a) {
   if (!r) { $('digest').innerHTML = '<p class="empty">Nothing to summarise yet.</p>'; return; }
   const none = (what) => `<p class="empty">${what}</p>`;
   const rows = (list, dot) => (list.length ? list.map((it) => `<div class="drow">${vdot(dot)}<b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}</div>`).join('') : none(`Nothing this ${esc(r.period.unit)}.`));
-  const f = r.followUp, c = r.card;
+  const f = r.followUp;
   $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' · in progress' : ''}</p>
     <h2>${esc(r.verdict)}</h2><p class="lede">${esc(r.headline)}</p>
-    <div class="stats">
-      <div><b>${numHtml(fmt(c.sessions))}</b><span>sessions</span></div>
-      <div><b>${numHtml(c.spend ? '$' + Math.round(c.spend) : '—')}</b><span>recorded spend</span></div>
-      <div><b>${numHtml(c.agentHours + ' h')}</b><span>of agent work</span></div>
-      <div><b class="txt">${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)}` : 'main task'}</span></div>
-    </div>
     <h3 class="good">What went well</h3>${rows(r.wentWell, 'better')}
     <h3 class="bad">What didn't</h3>${rows(r.didntGoWell, 'worse')}
-    <h3 class="change">What to change</h3>${r.change.length ? r.change.map((it) => `<div class="drow kinded"><span class="kind ${esc(it.kind)}">${esc(it.kind)}</span><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}</div>`).join('') : none('Nothing to change.')}
-    <h3 class="next">Try next ${esc(r.period.unit)}</h3>${r.actions.length ? r.actions.map((x, i) => `<div class="drow"><span class="n">${String(i + 1).padStart(2, '0')}</span><b>${esc(x.title)}</b>${x.metric ? `<span>Watch ${esc(x.metric.label)}, now ${esc(x.metric.display)}</span>` : ''}</div>`).join('') : none('Nothing to do next.')}
+    <h3 class="change">What to change</h3>${r.change.length ? r.change.map((it) => `<div class="drow kinded">${it.next ? `<span class="n">${String(it.next).padStart(2, '0')}</span>` : `<span class="kind ${esc(it.kind)}">${esc(it.kind)}</span>`}<b>${esc(it.text)}</b><span>${it.metric ? `Watch ${esc(it.metric.label)}, now ${esc(it.metric.display)}.` : esc(it.detail || '')}</span></div>`).join('') : none('Nothing to change.')}
     ${f ? `<h3>Did it work?</h3>${f.items.map((it) => `<div class="drow">${vdot(it.verdict)}<b>${esc(it.title)}</b>${it.metric ? `<span>${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})</span>` : ''}</div>`).join('')}` : ''}
     <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Keep it in your notes, or next to the code.</span></div>`;
   $('copyMd').addEventListener('click', async () => {

@@ -32,7 +32,7 @@ also where the screenshots below come from.
 
 ![Home: a one-line verdict, five areas with a status, a peek at the one you pick, what to do next and whether last month's changes worked](docs/images/home.jpg)
 ![Your monthly review: period card and Went well / Didn't go well / Change](docs/images/review.jpg)
-![Do next with fixes and an experiment, and Did it work? for the last saved review](docs/images/review-actions.jpg)
+![What to change: the numbered Do next items with the metric to watch, a fix to paste, and the experiment](docs/images/review-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
 ![Extensions: plugins, skills, MCP servers and hooks, loaded versus used](docs/images/extensions.jpg)
 
@@ -93,10 +93,9 @@ with the month before:
 - **Went well:** metrics that improved on the month before, prompt practices that work for you,
   clean risk signals.
 - **Didn't go well:** the patterns worth acting on, and metrics that got worse.
-- **Change:** the recommendations, each tagged *start* (a habit to add) or *stop* (something to
-  remove).
-- **Do next:** the top three changes, each with a fix to paste and the metric to watch, plus one
-  experiment to measure over the next month.
+- **Change:** one list of what to do, each tagged *start* (a habit to add) or *stop* (something to
+  remove). The top three lead, numbered: each has a fix to paste and the metric to watch, and one
+  of them is the experiment to measure over the next month.
 - **Did it work?** **Save this review** (or `--save-retro`), and the next review shows each saved
   action: baseline → now, better or worse.
 
@@ -257,7 +256,7 @@ claude mcp add agent-retro -- node /path/to/agent-retro.mjs --mcp --all-agents
 | `get_session` | One record by id |
 | `get_task_profile` | One task's stats plus the ids of its costliest and longest sessions |
 | `get_recommendations` | The recommendations above, with evidence and fixes, for the agent to present to you |
-| `get_retro` | The review of one period: card, Went well / Didn't go well / Change, Do next, the experiment and Did it work? |
+| `get_retro` | The review of one period: card, Went well / Didn't go well, Change (Do next items first, one marked as the experiment) and Did it work? |
 | `get_extensions` | Plugins, skills, MCP servers, hooks and slash commands, optionally filtered by kind or verdict |
 
 It speaks JSON-RPC 2.0 over stdio with no SDK dependency. It serves exactly the same views as the
@@ -296,10 +295,11 @@ period.
 
 - **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
   areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
-  to peek at its chart without leaving Home. *What should I change?* The top three changes, each
-  with a fix to copy. *Is it working?* How the actions from your last saved review moved.
-- **Review.** The period card, Went well / Didn't go well / Change, Do next and Did it work?,
-  then every recommendation with its fix and the metrics compared with the month before.
+  to peek at its chart without leaving Home. *Your next step:* the change with the most impact, with
+  a fix to copy. *Is it working?* How many changes from your last saved review moved the right way.
+- **Review.** The period card; Went well / Didn't go well / Did it work?; then What to change,
+  one list with the top three numbered first, each with its evidence, fix and metric to watch; then
+  the metrics compared with the month before.
 - **Work.** Tasks with per-session medians (select one to list its sessions, or open its
   playbook), how sessions go, and what the agent does: tools, why they fail, how it edits, when
   you stop it, shell commands and repeated sequences.

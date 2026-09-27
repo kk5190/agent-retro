@@ -554,23 +554,29 @@ function bar(v, max, width = 30) { return '█'.repeat(max ? Math.round((v / max
 const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v * 100) + '%' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+v.toFixed(2)));
 const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
 
-const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['change', 'Change']];
+const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"]];
 const reviewTitle = (r) => (r.period.unit === 'cycle' ? 'Cycle review' : 'Monthly review');
 const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.name}${r.period.current ? ' (in progress)' : ''}`);
 const MARK = { text: { better: '✓', worse: '✗' }, md: { better: '✅', worse: '❌' } };
+/** What to watch on a Do next item, and whether it is the experiment. */
+const watchNote = (r, it) => [it.metric && `watch ${it.metric.label}, now ${it.metric.display}`, it.experiment && r.experiment && `the experiment: check with ${r.experiment.check}`].filter(Boolean).join('; ');
 
-function retroText(r) {
+/** `detailed`: the full recommendations follow, so Change is only a pointer to them. */
+function retroText(r, { detailed = false } = {}) {
   if (!r) return [];
   const L = ['', `=== ${reviewTitle(r).toUpperCase()} · ${retroPeriod(r)} ===`, `  ${r.headline}`];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push('', `  ${title.toUpperCase()}`);
     if (!r[key].length) L.push('    —');
-    for (const it of r[key]) L.push(`    • ${it.kind ? `[${it.kind}] ` : ''}${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
+    for (const it of r[key]) L.push(`    • ${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
   }
-  L.push('', '  DO NEXT');
-  if (!r.actions.length) L.push('    —');
-  r.actions.forEach((x, i) => L.push(`    ${i + 1}. [ ] ${x.title}${x.metric ? `  (watch: ${x.metric.label}, now ${x.metric.display})` : ''}`));
-  if (r.experiment) L.push('', '  EXPERIMENT', `    For the next ${r.experiment.span}: ${r.experiment.title}.`, `    Measure: ${r.experiment.metric.label}, now ${r.experiment.metric.display}. Check with: ${r.experiment.check}`);
+  if (detailed) L.push('', `  CHANGE: ${r.change.length ? `see RECOMMENDATIONS below; start with the ${r.change.filter((it) => it.next).length} marked DO NEXT` : 'nothing to change'}`);
+  else L.push('', '  CHANGE (do the numbered ones first)');
+  if (!detailed && !r.change.length) L.push('    —');
+  for (const it of detailed ? [] : r.change) {
+    L.push(`    ${it.next ? `${it.next}. [ ]` : '•'} [${it.kind}] ${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
+    if (it.next && watchNote(r, it)) L.push(`      → ${watchNote(r, it)}`);
+  }
   L.push('', '  DID IT WORK?');
   if (r.followUp) {
     L.push(`    Since the review saved ${r.followUp.savedAt.slice(0, 10)}:`);
@@ -579,19 +585,19 @@ function retroText(r) {
   return L;
 }
 
-export function retroMd(r) {
+export function retroMd(r, { detailed = false } = {}) {
   if (!r) return [];
   const L = [`## ${reviewTitle(r)}: ${retroPeriod(r)}`, '', r.headline, ''];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push(`### ${title}`, '');
     if (!r[key].length) L.push('- —');
-    for (const it of r[key]) L.push(`- ${it.kind ? `_${it.kind}_ ` : ''}**${it.text}**${it.detail ? ` ${it.detail}` : ''}`);
+    for (const it of r[key]) L.push(`- **${it.text}**${it.detail ? ` ${it.detail}` : ''}`);
     L.push('');
   }
-  L.push('### Do next', '');
-  if (!r.actions.length) L.push('- —');
-  for (const x of r.actions) L.push(`- [ ] **${x.title}**${x.metric ? ` (watch ${x.metric.label}, now ${x.metric.display})` : ''}`);
-  if (r.experiment) L.push('', '### Experiment', '', `For the next ${r.experiment.span}: **${r.experiment.title}**. Measure ${r.experiment.metric.label} (now ${r.experiment.metric.display}); check with \`${r.experiment.check}\`.`);
+  L.push('### Change', '');
+  if (detailed) L.push(r.change.length ? `See **Recommendations** below; start with the ones marked **Do next**.` : '- —');
+  else if (!r.change.length) L.push('- —');
+  for (const it of detailed ? [] : r.change) L.push(`- ${it.next ? '[ ] ' : ''}_${it.kind}_ **${it.text}**${it.detail ? ` ${it.detail}` : ''}${it.next && watchNote(r, it) ? ` (${watchNote(r, it)})` : ''}`);
   if (r.followUp) {
     L.push('', '### Did it work?', '', `Since the review saved ${r.followUp.savedAt.slice(0, 10)}:`, '');
     for (const it of r.followUp.items) L.push(`- ${MARK.md[it.verdict] || '➖'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}`);
@@ -613,13 +619,15 @@ function renderText(a, hist, o) {
   L.push(`AGENT-RETRO REPORT · ${multi ? 'all coding agents' : 'Claude Code'}`);
   L.push(`Generated ${a.generatedAt.slice(0, 19).replace('T', ' ')}  |  ${a.scope.files} transcripts  |  ${a.scope.first} → ${a.scope.last}`);
 
-  L.push(...retroText(a.retro));
+  L.push(...retroText(a.retro, { detailed: true }));
+  const nextOf = (id) => ((a.retro && a.retro.change) || []).find((it) => it.recId === id && it.next);
 
   sec('RECOMMENDATIONS');
   const recs = a.recommendations || [];
   if (!recs.length) L.push('  nothing to recommend for this selection');
   recs.forEach((r, i) => {
-    L.push(`  ${i + 1}. [${r.level}] ${r.title}`);
+    const nx = nextOf(r.id);
+    L.push(`  ${i + 1}. [${r.level}] ${r.title}${nx ? `  ← DO NEXT${watchNote(a.retro, nx) ? ` (${watchNote(a.retro, nx)})` : ''}` : ''}`);
     L.push(`     why: ${r.evidence}`);
     L.push(`     do:  ${r.action}`);
     if (r.trend) L.push(`     trend: ${fmtMetric(r.trend, r.trend.before)} → ${fmtMetric(r.trend, r.trend.after)} (${r.trend.verdict}, ${trendWindow(a.trend)})`);
@@ -811,10 +819,11 @@ function renderMd(a, hist, o) {
     `| Tool calls | ${a.volume.toolCalls} |`,
     `| Active days | ${a.scope.activeDays} |`,
     `| Prompts / active day | ${a.volume.promptsPerActiveDay} |`, '');
-  L.push(...retroMd(a.retro), '');
+  L.push(...retroMd(a.retro, { detailed: true }), '');
   L.push('## Recommendations', '');
   for (const r of a.recommendations || []) {
-    L.push(`### ${r.title} _(${r.level})_`, '', `**Why:** ${r.evidence}`, '', `**Do:** ${r.action}`, '');
+    const nx = ((a.retro && a.retro.change) || []).find((it) => it.recId === r.id && it.next);
+    L.push(`### ${r.title} _(${r.level})_${nx ? ' · **Do next**' : ''}`, ...(nx && watchNote(a.retro, nx) ? ['', `_${watchNote(a.retro, nx)}_`] : []), '', `**Why:** ${r.evidence}`, '', `**Do:** ${r.action}`, '');
     if (r.fix) L.push(`Fix (${r.fix.kind} → \`${r.fix.target}\`):`, '', '```' + (r.fix.kind === 'settings' ? 'json' : r.fix.kind === 'shell' ? 'bash' : ''), r.fix.content, '```', '');
   }
   L.push('## Tasks', '', '| Task | Sessions | Median turns | Median min | Cost | Tool errors | Corrections | Top commands |', '| --- | --- | --- | --- | --- | --- | --- | --- |');

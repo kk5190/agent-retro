@@ -77,10 +77,6 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   for (const f of (a.findings || [])) if (f.level === 'attention') didntGoWell.push({ text: f.title, detail: f.detail, section: f.section });
   for (const [key, m] of trend) if (m.verdict === 'worse' && !didntGoWell.some((x) => x.text.startsWith(m.label))) didntGoWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
 
-  // Change: habits to start first, then things to stop
-  const toItem = (kind) => (r) => ({ kind, text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
-  const change = [...recs.filter((r) => !STOP.has(r.id)).slice(0, MAX).map(toItem('start')), ...recs.filter((r) => STOP.has(r.id)).slice(0, MAX).map(toItem('stop'))];
-
   // Do next: the top three with a fix, each with the metric that will show whether it worked
   const metricNow = (key) => (TREND_METRICS[key] ? TREND_METRICS[key].of(list) : null);
   const actions = recs.filter((r) => r.fix).slice(0, 3).map((r) => {
@@ -93,6 +89,17 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   const exp = actions.find((x) => x.metric);
   const experiment = exp ? { title: exp.title, metric: exp.metric, span: cycle ? `${cycle.days} days` : 'month',
     check: `agent-retro --retro at the end of next ${unit}` } : null;
+
+  // Change: one list, so nothing is said twice. The Do next items lead, numbered, with the metric to
+  // watch (one of them is the experiment); then other habits to start, then things to stop.
+  const kindOf = (r) => (STOP.has(r.id) ? 'stop' : 'start');
+  const toItem = (r) => ({ kind: kindOf(r), text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
+  const rest = recs.filter((r) => !actions.some((x) => x.id === r.id));
+  const change = [
+    ...actions.map((x, i) => ({ ...toItem(recs.find((r) => r.id === x.id)), next: i + 1, ...(x.metric && { metric: x.metric }), ...(x === exp && { experiment: true }) })),
+    ...rest.filter((r) => kindOf(r) === 'start').slice(0, MAX).map(toItem),
+    ...rest.filter((r) => kindOf(r) === 'stop').slice(0, MAX).map(toItem),
+  ];
   const followUp = previous ? {
     savedAt: previous.savedAt,
     items: (previous.actions || []).map((p) => {

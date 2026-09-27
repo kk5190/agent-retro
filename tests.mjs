@@ -565,6 +565,11 @@ test('review: columns, caps, action metrics and "Did it work?" for a saved revie
   assert.equal(r.thin, true, 'three sessions are too few to judge');
   assert.match(r.verdict, /^3 sessions so far: too few to judge this month$/);
   assert.equal(r.experiment.span, 'month');
+  // Change is the one list: Do next items lead, numbered, and no recommendation appears twice
+  assert.deepEqual(r.change.filter((it) => it.next).map((it) => it.recId), r.actions.map((x) => x.id));
+  assert.deepEqual(r.change.slice(0, r.actions.length).map((it) => it.next), r.actions.map((_, i) => i + 1));
+  assert.equal(new Set(r.change.map((it) => it.recId)).size, r.change.length, 'each change once');
+  assert.equal(r.change.filter((it) => it.experiment).length, 1, 'one experiment, marked on its item');
 });
 
 test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', () => {
@@ -572,7 +577,9 @@ test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', 
   const run = (...args) => spawnSync(process.execPath, [CLI, '--demo', ...args], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8' });
   const md = run('--retro', '--md');
   assert.equal(md.status, 0, md.stderr);
-  for (const h of ['## Monthly review', '### Went well', "### Didn't go well", '### Change', '### Do next', '### Experiment', '### Did it work?']) assert.ok(md.stdout.includes(h), h);
+  for (const h of ['## Monthly review', '### Went well', "### Didn't go well", '### Change', '### Did it work?']) assert.ok(md.stdout.includes(h), h);
+  assert.ok(!md.stdout.includes('### Do next') && !md.stdout.includes('### Experiment'), 'Do next and the experiment live inside Change, not beside it');
+  assert.match(md.stdout, /^- \[ \] _(start|stop)_ \*\*.+\(watch .+; the experiment: check with/m, 'the first Do next item carries its metric and the experiment');
   assert.match(md.stdout, /Since the review saved/, 'the demo ships a saved review');
   const saved = run('--save-retro');
   assert.equal(saved.status, 0, saved.stderr);

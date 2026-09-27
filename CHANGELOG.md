@@ -16,8 +16,9 @@
 - **Review periods:** calendar months by default, or fixed cycles (a start day plus a length).
   The review covers the last completed period against the one before; fewer than 5 sessions is
   reported as too few to judge.
-- **Monthly review:** a period card; Went well / Didn't go well / Change (start or stop); Do next,
-  with fixes, the metric to watch and one experiment; and Did it work?, for the last saved review.
+- **Monthly review:** a period card; Went well / Didn't go well; Change, one list of things to
+  start or stop, led by the top three with fixes, the metric to watch and one experiment; and Did
+  it work?, for the last saved review. Each fact appears in one place.
   Available in the dashboard, as `--retro [--md]`, as `--save-retro`, and through the MCP tool
   `get_retro`.
 - **Recommendations:** evidence-backed rules, each with a fix you can paste:

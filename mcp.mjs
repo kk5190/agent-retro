@@ -49,7 +49,7 @@ export const TOOLS = [
   },
   {
     name: 'get_retro',
-    description: 'A personal review of one period of agent use (a calendar month by default, or the configured cycle): a period card (sessions, spend, agent hours, main task), Went well / Didn\'t go well, Change (things to start or stop), Do next (the top three actions with fixes and the metric to watch), one experiment to measure, and Did it work? (the last saved review\'s actions, baseline → now). Good for "how did my agent use go last month?".',
+    description: 'A personal review of one period of agent use (a calendar month by default, or the configured cycle): a period card (sessions, spend, agent hours, main task), Went well / Didn\'t go well, Change (one list of things to start or stop; the top three, marked `next`, carry the metric to watch and one is marked as the experiment; `actions` repeats those three with their fixes), and Did it work? (the last saved review\'s actions, baseline → now). Good for "how did my agent use go last month?".',
     inputSchema: { type: 'object', properties: { ...FILTERS, period: { type: 'string', description: 'A date inside the period to review (YYYY-MM-DD); default: the last completed period' } } },
   },
   {

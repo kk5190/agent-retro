@@ -734,12 +734,25 @@
                       },
                       "recId": {
                         "type": "string"
+                      },
+                      "next": {
+                        "type": "number",
+                        "description": "Position among the Do next items (1–3), which lead the list; absent for the others"
+                      },
+                      "metric": {
+                        "type": "object",
+                        "description": "For Do next items: the metric that will show whether the change worked"
+                      },
+                      "experiment": {
+                        "type": "boolean",
+                        "description": "The item to measure over the next period"
                       }
                     }
                   }
                 },
                 "actions": {
                   "type": "array",
+                  "description": "The Do next items with their fixes, as --save-retro stores them. They also lead `change`, so show one or the other.",
                   "items": {
                     "type": "object",
                     "required": [
