@@ -478,6 +478,8 @@ export function analyze(data, o, sessionRecords = []) {
 // ---------------------------------------------------------------------------
 // Findings — plain-language conclusions, each pointing at the section that backs it
 // ---------------------------------------------------------------------------
+const ITEM_KIND = { tool: 'Tool results', toolInput: 'Tool call arguments', mcpOutput: 'MCP output', mcpListing: 'MCP tools listed', skillListing: 'Skills listed', skillLoad: 'Skill loaded', hook: 'Hook output', memory: 'CLAUDE.md & memory', unlogged: 'System prompt & built-in tools', reasoning: 'Reasoning', assistantText: 'Agent replies' };
+const ITEM_NAMELESS = new Set(['memory', 'unlogged', 'reasoning', 'assistantText']);
 export const CONTEXT_LABELS = {
   unlogged: 'System prompt & built-in tools (not logged)', system: 'System prompt', memory: 'CLAUDE.md / memory', toolDefs: 'Tool & agent listings', skills: 'Skill instructions',
   hooks: 'Hook output', reminders: 'Reminders & status', userText: 'Your prompts', files: 'Attached files',
@@ -776,6 +778,27 @@ function renderText(a, hist, o) {
     row('API errors', cb.apiErrors);
   }
 
+  const C = a.contextAnalysis;
+  if (C && C.sessions) {
+    const ps = C.perSession;
+    sec(`WHAT FILLS THE CONTEXT (per session; starts at ${fmtN(ps.startMedian || 0)}, grows to ${fmtN(ps.peakMedian || 0)})`);
+    for (const it of C.items.slice(0, 8)) L.push(`  ${`${ITEM_KIND[it.kind] || it.kind}${ITEM_NAMELESS.has(it.kind) ? '' : `: ${it.kind === 'tool' || it.kind === 'toolInput' ? prettyTool(it.name) : it.name}`}`.padEnd(46)} ${fmtN(it.perSession).padStart(7)}  ${String(Math.round(it.share * 100)).padStart(3)}%${it.used === false ? '  never used' : ''}`);
+    if (C.bottleneck) L.push('', `  Biggest thing you can change: ${ITEM_KIND[C.bottleneck.kind] || C.bottleneck.kind}: ${C.bottleneck.name}.`, `  ${C.bottleneck.advice}`);
+  }
+  const K = a.costBreakdown;
+  if (K && K.sessions) {
+    sec(`WHERE THE MONEY GOES ($${K.usd} over ${K.sessions} sessions with a cost; the costliest fifth is ${Math.round(K.topFifthShare * 100)}%)`);
+    for (const [title, list] of [['by task', K.byTask], ['by model', K.byModel]]) {
+      L.push(`  ${title}:`);
+      for (const x of list.slice(0, 6)) L.push(`    ${String(x.name).padEnd(34)} ${`$${x.usd.toFixed(2)}`.padStart(9)}  ${String(Math.round(x.share * 100)).padStart(3)}%  $${x.perSession.toFixed(2)} / session`);
+    }
+  }
+  const O = a.agentOutput;
+  if (O && O.factors && O.factors.length) {
+    sec('YOUR SETUP AGAINST HOW SESSIONS WENT (with vs without; correlation, not proof)');
+    for (const f of O.factors.slice(0, 8)) L.push(`  ${`${f.kind} ${f.name}`.padEnd(40)} ${String(f.with.sessions).padStart(3)} sessions  corrections ${Math.round(f.with.correctionRate * 100)}% vs ${Math.round(f.without.correctionRate * 100)}%  failed calls ${Math.round(f.with.toolErrorRate * 100)}% vs ${Math.round(f.without.toolErrorRate * 100)}%`);
+  }
+
   const st = Object.entries(a.subagentTypes || {});
   if (st.length) {
     sec('SUBAGENTS');
@@ -857,6 +880,20 @@ function renderMd(a, hist, o) {
     L.push('## Context sources (estimated)', '', '| Source | Tokens | Share |', '| --- | --- | --- |');
     for (const [k, v] of Object.entries(cb.sources)) L.push(`| ${k} | ${v} | ${pct(v, tot)} |`);
     L.push('', `Compactions: ${cb.compactions} in ${cb.compactedSessions} sessions · turns over 150k: ${cb.highContextTurns}`, '');
+  }
+  const C = a.contextAnalysis;
+  if (C && C.sessions) {
+    L.push(`## What fills the context, item by item`, '', `A typical fresh session starts at ${C.perSession.startMedian || 0} tokens and grows to ${C.perSession.peakMedian || 0}. Estimated per session:`, '', '| Item | Tokens / session | Share | What to try |', '| --- | --- | --- | --- |');
+    for (const it of C.items.slice(0, 10)) L.push(`| ${ITEM_KIND[it.kind] || it.kind}${ITEM_NAMELESS.has(it.kind) ? '' : `: ${it.kind === 'tool' || it.kind === 'toolInput' ? prettyTool(it.name) : it.name}`} | ${it.perSession} | ${Math.round(it.share * 100)}% | ${it.advice || ''} |`);
+    L.push('');
+  }
+  const K = a.costBreakdown;
+  if (K && K.sessions) {
+    L.push('## Where the money goes', '', '| By task | Spend | Share | Per session |', '| --- | --- | --- | --- |');
+    for (const x of K.byTask) L.push(`| ${x.name} | $${x.usd.toFixed(2)} | ${Math.round(x.share * 100)}% | $${x.perSession.toFixed(2)} |`);
+    L.push('', '| By model | Spend | Share | Per session |', '| --- | --- | --- | --- |');
+    for (const x of K.byModel) L.push(`| ${x.name} | $${x.usd.toFixed(2)} | ${Math.round(x.share * 100)}% | $${x.perSession.toFixed(2)} |`);
+    L.push('');
   }
   if (Object.keys(a.subagentTypes || {}).length) {
     L.push('## Subagents', '', '| Type | Runs | Tool calls | Errors | Tokens |', '| --- | --- | --- | --- | --- |');

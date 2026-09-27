@@ -174,7 +174,7 @@ function newSession(e) {
     subagents: { runs: 0, toolCalls: 0, types: {}, byType: {} },
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     costUsd: 0, peakContext: 0, models: {},
-    context: { estimated: false, sources: {}, toolOutputByTool: {}, startTokens: null, startLogged: 0, compactions: 0, compactPreTokens: 0, highContextTurns: 0, apiErrors: 0 },
+    context: { estimated: false, sources: {}, toolOutputByTool: {}, toolInputByTool: {}, startTokens: null, startLogged: 0, compactions: 0, compactPreTokens: 0, highContextTurns: 0, apiErrors: 0 },
     risk: { sensitiveAccess: 0, destructiveCommands: 0, maxErrorsPerTurn: 0 },
     signals: { testRuns: 0, fixLoops: 0, toolErrorRate: 0, correctionRate: 0, ackRate: 0 },
     _prompts: [], _subPrompts: [], _shellCmds: [], _toolNames: [], _edited: new Set(), _read: new Set(),
@@ -335,6 +335,7 @@ export function buildSessions(events, o = {}) {
         if (e.max) s._ctxMax[e.cat] = Math.max(s._ctxMax[e.cat] || 0, e.chars);
         else inc(c.sources, e.cat, e.chars);
         if (e.cat === 'toolOutput') inc(c.toolOutputByTool, e.tool, e.chars);
+        if (e.cat === 'toolInput' && e.tool) inc(c.toolInputByTool, e.tool, e.chars);
         break;
       }
       case 'loaded': { const m = s._loaded[e.kind]; if (m) m[e.name] = Math.max(m[e.name] || 0, e.chars || 0); break; }
@@ -389,7 +390,7 @@ function finalize(s) {
   const c = s.context;
   for (const [k, v] of Object.entries(s._ctxMax)) c.sources[k] = (c.sources[k] || 0) + v;
   const toTokens = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round(v / 4)]).sort((a, b) => b[1] - a[1]));
-  c.sources = toTokens(c.sources); c.toolOutputByTool = toTokens(c.toolOutputByTool);
+  c.sources = toTokens(c.sources); c.toolOutputByTool = toTokens(c.toolOutputByTool); c.toolInputByTool = toTokens(c.toolInputByTool);
   c.startLogged = Math.round(s._preChars / 4);
   const r = s._responses.sort((a, b) => a - b);
   s.time = { agentMinutes: Math.round(s._agentMs / 60000), waitMinutes: Math.round(s._waitMs / 60000), awayMinutes: Math.round(s._awayMs / 60000), medianResponseSec: r.length ? Math.round(r[r.length >> 1] / 1000) : null };
@@ -781,7 +782,11 @@ function contextAdvice(it) {
       : /^(Read|View)$/.test(it.name) ? 'Be specific about the files in your prompt, search before reading, or hand wide exploration to a subagent: it has its own window and returns a summary.'
       : /^(Bash|Shell|exec)/i.test(it.name) ? 'Trim command output (head, tail, grep, --quiet) before it comes back.'
       : 'Ask for narrower results, or run it in a subagent so only a summary comes back.';
-    case 'mcpOutput': return 'Ask the server for fewer fields or pages, or call it less often.';
+    case 'mcpOutput': return BROWSER_TOOL.test(it.name) ? 'Browser output (screenshots, page dumps) stays in the context: have the agent read page text or the accessibility tree, and keep screenshots for visual checks.' : 'Ask the server for fewer fields or pages, or call it less often.';
+    case 'toolInput': return /^(Write|create_file)$/i.test(it.name) ? 'Each whole-file write puts the full file into the context: prefer Edit for changes, and keep generated files small.'
+      : /Edit/i.test(it.name) ? 'Large edits carry the old and the new text: ask for smaller, targeted edits.'
+      : /^(Bash|Shell|exec)/i.test(it.name) ? 'Long scripts written inline (heredocs, python -c) stay in the context: keep scripts in files and run them.'
+      : 'The arguments the agent writes for this tool stay in the context: ask for smaller calls.';
     case 'mcpListing': return it.used ? 'An MCP server loads all its tools into every session: connect it only in the projects that use it, or use a skill instead, which loads only when needed.' : 'Its tools load into every session and it is never called: disconnect it.';
     case 'skillListing': return it.used ? 'Its skill descriptions load every session: keep only the skills you use.' : 'Listed every session and never used: disable it.';
     case 'skillLoad': return 'Each use loads its full instructions: trim the SKILL.md or split rarely needed parts into files it reads on demand.';
@@ -807,7 +812,11 @@ export function summarizeContext(sessions, ext = {}) {
   if (!n) return { sessions: 0, sources: [], items: [], heaviest: [], bottleneck: null };
   // The system prompt and built-in tool definitions are never logged: they are what the first reply's
   // real window holds beyond everything logged before it.
-  const unlogged = (s) => (s.context.startTokens ? Math.max(0, s.context.startTokens - s.context.startLogged) : 0);
+  // A resumed conversation's first reply already holds the old context, so the typical fresh start (the
+  // lower quartile of first-reply windows) is the baseline, and caps what each session counts as unlogged.
+  const starts = measured.map((s) => s.context.startTokens).filter(Boolean).sort((a, b) => a - b);
+  const baseline = starts.length ? starts[Math.floor(0.25 * (starts.length - 1))] : 0;
+  const unlogged = (s) => (s.context.startTokens ? Math.max(0, Math.min(baseline, s.context.startTokens) - s.context.startLogged) : 0);
   const sourcesOf = (s) => ({ ...s.context.sources, ...(unlogged(s) && { unlogged: unlogged(s) }) });
   const totalOf = (s) => Object.values(sourcesOf(s)).reduce((x, v) => x + v, 0);
   const fixedOf = (s) => Object.entries(sourcesOf(s)).reduce((x, [k, v]) => x + (FIXED_CONTEXT.has(k) ? v : 0), 0);
@@ -823,6 +832,9 @@ export function summarizeContext(sessions, ext = {}) {
   const toolOut = {}, toolSessions = {};
   for (const s of measured) for (const [t, v] of Object.entries(s.context.toolOutputByTool)) if (!/^mcp__/.test(t)) { inc(toolOut, t, v); inc(toolSessions, t); }
   for (const [t, v] of Object.entries(toolOut)) add('tool', t, v, { sessions: toolSessions[t] });
+  const toolIn = {}, inSessions = {};
+  for (const s of measured) for (const [t, v] of Object.entries(s.context.toolInputByTool || {})) { inc(toolIn, t, v); inc(inSessions, t); }
+  for (const [t, v] of Object.entries(toolIn)) add('toolInput', t, v, { sessions: inSessions[t] });
   for (const m of ext.mcpServers || []) {
     add('mcpOutput', m.name, m.outputTokens, { sessions: m.sessionsUsed });
     add('mcpListing', m.name, m.listingTokens * m.sessionsLoaded, { sessions: m.sessionsLoaded, used: m.calls > 0 });
@@ -848,11 +860,11 @@ export function summarizeContext(sessions, ext = {}) {
     sessions: n,
     perSession: { median: median(totals), p90: [...totals].sort((a, b) => a - b)[Math.floor(0.9 * (n - 1))], fixedMedian: median(fixed),
       fixedShare: +(fixed.reduce((x, v) => x + v, 0) / Math.max(1, totals.reduce((x, v) => x + v, 0))).toFixed(3),
-      startMedian: median(measured.map((s) => s.context.startTokens)), peakMedian: median(measured.map((s) => s.peakContext)),
-      // real tokens, not the estimate: how much of the largest window was already there at the first reply
-      startShare: median(measured.filter((s) => s.context.startTokens && s.peakContext).map((s) => +(s.context.startTokens / s.peakContext).toFixed(3))) },
+      startMedian: baseline || null, peakMedian: median(measured.map((s) => s.peakContext)),
+      // real tokens, not the estimate: how much of a typical largest window is already there at a fresh start
+      startShare: baseline && median(measured.map((s) => s.peakContext)) ? +Math.min(1, baseline / median(measured.map((s) => s.peakContext))).toFixed(3) : null },
     sources, items: items.slice(0, 20), heaviest,
-    bottleneck: big && { ...big, name: big.kind === 'tool' ? prettyToolName(big.name) : big.name },
+    bottleneck: big && { ...big, name: big.kind === 'tool' || big.kind === 'toolInput' ? prettyToolName(big.name) : big.name },
   };
 }
 
@@ -904,7 +916,7 @@ function outcomes(list) {
   return {
     sessions: list.length,
     outputPerSession: median(list.map((s) => s.tokens.output)),
-    costPerSession: +(median(list.map((s) => s.costUsd)) || 0).toFixed(2),
+    costPerSession: list.some((s) => s.costUsd > 0) ? +median(list.filter((s) => s.costUsd > 0).map((s) => s.costUsd)).toFixed(2) : null, // many sessions log no cost at all
     promptsPerSession: median(list.map((s) => s.turns.human)),
     correctionRate: human ? +(add((s) => s.turns.pushback) / human).toFixed(3) : 0,
     toolErrorRate: calls ? +(add((s) => s.tools.errors) / calls).toFixed(3) : 0,

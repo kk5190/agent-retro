@@ -1213,7 +1213,7 @@ function renderTokens(a) {
 
 /* ---- context: what fills the window, item by item ---- */
 const SRC_COLOR = { unlogged: 'var(--ink-3)', system: 'var(--ink-2)', memory: 'var(--s5)', toolDefs: 'var(--s4)', hooks: 'var(--s2)', toolOutput: 'var(--s1)', skills: 'var(--s3)', reasoning: 'var(--s6)' };
-const ITEM_KIND = { tool: 'Tool results', mcpOutput: 'MCP output', mcpListing: 'MCP tools listed', skillListing: 'Skills listed', skillLoad: 'Skill loaded', hook: 'Hook output', memory: 'CLAUDE.md & memory', unlogged: 'System prompt & built-in tools', reasoning: 'Reasoning', assistantText: 'Agent replies' };
+const ITEM_KIND = { tool: 'Tool results', toolInput: 'Tool call arguments', mcpOutput: 'MCP output', mcpListing: 'MCP tools listed', skillListing: 'Skills listed', skillLoad: 'Skill loaded', hook: 'Hook output', memory: 'CLAUDE.md & memory', unlogged: 'System prompt & built-in tools', reasoning: 'Reasoning', assistantText: 'Agent replies' };
 /** One stacked bar and its legend: [key, label, value, colour, lighter?] */
 function stackOf(barId, keyId, parts, fmtV) {
   const total = parts.reduce((x, p) => x + p[2], 0) || 1;
@@ -1228,9 +1228,9 @@ function renderContext(a) {
     bars('ctxTools', []); return;
   }
   kpis('ctxKpis', [
-    ['starts at', fmtN(ps.startMedian || 0), 'tokens at the first reply, before any work'],
+    ['starts at', fmtN(ps.startMedian || 0), 'tokens at the first reply of a typical fresh session'],
     ['grows to', fmtN(ps.peakMedian || 0), 'the largest context a session reaches (median)'],
-    ['there before you type', ps.startShare != null ? rate(ps.startShare) : rate(ps.fixedShare), ps.startShare != null ? 'of the largest context, at the first reply' : 'of the estimated context, every session'],
+    ['there before you type', ps.startShare != null ? rate(ps.startShare) : rate(ps.fixedShare), ps.startShare != null ? 'of a typical largest context is there at the start' : 'of the estimated context, every session'],
     ['compactions', fmt(cb.compactions || 0), `${fmt(cb.compactedSessions || 0)} sessions ran out of room`],
   ]);
   const b = C.bottleneck;
@@ -1249,10 +1249,11 @@ function renderContext(a) {
   $('ctxHeavy').innerHTML = '<tr><th>Session</th><th>Peak</th><th>Biggest source</th></tr>' + H.map((x) => `<tr class="pick" tabindex="0" data-id="${esc(x.id)}"><td>${esc(x.title || x.id)}<div class="sub">${esc(taskLabel(x.task))}${x.topTool ? ` · most from ${esc(x.topTool.name)}` : ''}</div></td><td>${fmtN(x.peakContext)}${x.compactions ? `<div class="sub">${x.compactions} compacted</div>` : ''}</td><td>${esc(x.topSource ? ctxLabel(x.topSource.key) : '—')}</td></tr>`).join('');
   pickSessions('ctxHeavy');
 }
-const itemName = (x) => (x.kind === 'tool' ? prettyTool(x.name) : ['memory', 'unlogged', 'reasoning', 'assistantText'].includes(x.kind) ? '' : x.name);
+const itemName = (x) => (x.kind === 'tool' || x.kind === 'toolInput' ? prettyTool(x.name) : ['memory', 'unlogged', 'reasoning', 'assistantText'].includes(x.kind) ? '' : x.name);
 
 /* ---- output: what the agent writes, and the setup against how sessions went ---- */
-const shortModel = (m) => (m ? m.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : '—');
+/** claude-opus-5-5 → opus 5.5, claude-haiku-4-5-20251001 → haiku 4.5, claude-opus-5 → opus 5 */
+const shortModel = (m) => (m ? m.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : '—');
 function renderOutput(a) {
   const O = a.agentOutput || {};
   if (!O.sessions) { kpis('outKpis', [['sessions', '0', 'nothing in this period']]); ['outStack', 'outKeys', 'outModels', 'outSetup'].forEach((id) => { $(id).innerHTML = ''; }); return; }
@@ -1265,7 +1266,7 @@ function renderOutput(a) {
   ]);
   const MIX_COLOR = { assistantText: 'var(--s1)', reasoning: 'var(--s5)', toolInput: 'var(--s3)' };
   stackOf('outStack', 'outKeys', O.mix.map((x) => [x.key, x.label, x.tokens, MIX_COLOR[x.key]]), fmtN);
-  const row = (m) => `<td>${fmtN(m.outputPerSession)}</td><td>${usd(m.costPerSession)}</td><td>${fmt(m.promptsPerSession)}</td><td>${rate(m.correctionRate)}</td><td>${rate(m.toolErrorRate)}</td><td>${m.fixLoopsPerSession}</td>`;
+  const row = (m) => `<td>${fmtN(m.outputPerSession)}</td><td>${m.costPerSession == null ? '—' : usd(m.costPerSession)}</td><td>${fmt(m.promptsPerSession)}</td><td>${rate(m.correctionRate)}</td><td>${rate(m.toolErrorRate)}</td><td>${m.fixLoopsPerSession}</td>`;
   const head = '<th>Output</th><th>Cost</th><th>Prompts</th><th>Corrections</th><th>Failed calls</th><th>Fix loops</th>';
   $('outModels').innerHTML = `<tr><th>Model</th><th>Sessions</th><th>Main task</th>${head}</tr>` + O.byModel.map((m) => `<tr><td>${esc(shortModel(m.model))}</td><td>${fmt(m.sessions)}</td><td>${esc(m.topTask ? `${taskLabel(m.topTask.id)} ${rate(m.topTask.share)}` : '—')}</td>${row(m)}</tr>`).join('');
   const F = O.factors || [];
@@ -1274,7 +1275,7 @@ function renderOutput(a) {
   const KIND = { skill: 'Skill', mcp: 'MCP server', plugin: 'Plugin' };
   const cmp = (w, wo, f) => { const d = wo ? (w - wo) / wo : w ? 1 : 0; const cls = Math.abs(d) < 0.1 ? '' : d < 0 ? 'v-better' : 'v-worse'; return `<td class="${cls}">${f(w)} <span class="dim">vs ${f(wo)}</span></td>`; };
   $('outSetup').innerHTML = F.length ? `<tr><th>Setup</th><th>Used in</th><th>Main task</th><th>Cost / session</th><th>Prompts</th><th>Corrections</th><th>Failed calls</th></tr>` + F.map((x) => `<tr><td><span class="kindtag">${KIND[x.kind]}</span> ${esc(x.kind === 'mcp' ? x.name : x.name)}</td><td>${fmt(x.with.sessions)}</td><td>${esc(x.topTask ? `${taskLabel(x.topTask.id)} ${rate(x.topTask.share)}` : '—')}</td>
-      ${cmp(x.with.costPerSession, x.without.costPerSession, usd)}${cmp(x.with.promptsPerSession, x.without.promptsPerSession, fmt)}${cmp(x.with.correctionRate, x.without.correctionRate, rate)}${cmp(x.with.toolErrorRate, x.without.toolErrorRate, rate)}</tr>`).join('') : '';
+      ${x.with.costPerSession == null || x.without.costPerSession == null ? '<td class="dim">no cost logged</td>' : cmp(x.with.costPerSession, x.without.costPerSession, usd)}${cmp(x.with.promptsPerSession, x.without.promptsPerSession, fmt)}${cmp(x.with.correctionRate, x.without.correctionRate, rate)}${cmp(x.with.toolErrorRate, x.without.toolErrorRate, rate)}</tr>`).join('') : '';
 }
 /** Rows with data-id open that session on the Sessions page. */
 function pickSessions(id) {
@@ -1857,12 +1858,12 @@ function renderPeek(a) {
   const areas = areasOf(a);
   const ar = areas.find((x) => x.id === PEEK) || areas[0];
   document.querySelectorAll('.area').forEach((b) => b.setAttribute('aria-expanded', String(b.dataset.area === ar.id)));
-  const TITLE = { cost: 'Where the spend goes, by task', context: 'What fills the context', reliability: 'Why tool calls fail', prompting: 'Practices in your opening prompts', setup: 'Extensions you never use' };
+  const TITLE = { cost: 'Where the spend goes, by task', context: 'What fills the context, per session', reliability: 'Why tool calls fail', prompting: 'Practices in your opening prompts', setup: 'Extensions you never use' };
   $('peek').innerHTML = `<div class="peek-head"><h3>${esc(ar.name)}: ${esc(TITLE[ar.id])}</h3><a href="#${ar.page}">Open the ${esc(ar.page)} page →</a></div><div class="bars" id="peekBars"></div>`;
   const cb = a.contextBreakdown || {};
   charts.delete('peekChart');
   if (ar.id === 'cost') bars('peekBars', Object.values(a.tasks || {}).filter((t) => t.totalCost).map((t) => [t.label, t.totalCost]).sort((x, y) => y[1] - x[1]).slice(0, 6), { total: a.cost.usd, value: usd });
-  else if (ar.id === 'context') bars('peekBars', topN(cb.sources, 5), { total: sum(cb.sources), label: ctxLabel, value: fmtN });
+  else if (ar.id === 'context') { const S = ((a.contextAnalysis || {}).sources || []).slice(0, 5); bars('peekBars', S.map((x) => [x.key, x.perSession]), { total: ((a.contextAnalysis || {}).sources || []).reduce((t, x) => t + x.perSession, 0), label: ctxLabel, value: (v) => fmtN(v) + ' / session' }); }
   else if (ar.id === 'reliability') bars('peekBars', topN((a.toolErrors || {}).byClass, 5), { total: (a.toolErrors || {}).total, label: (k) => ERR_LABEL[k] || k });
   else if (ar.id === 'prompting') bars('peekBars', ((a.prompting || {}).practices || []).filter((p) => p.sessions).map((p) => [p.label, Math.round(p.share * 100)]), { value: (v) => v + '%' });
   else {

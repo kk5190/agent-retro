@@ -617,7 +617,7 @@ export async function collectClaude(o = {}) {
           if (b.type === 'text') { ctx('assistantText', b.text); continue; }
           if (b.type !== 'tool_use') continue;
           if (b.id) { toolNames.set(b.id, b.name); pending.set(b.id, { ...base, toolName: b.name }); }
-          ctx('toolInput', b.input);
+          ctx('toolInput', b.input, { tool: b.name });
           events.push({ ...base, role: 'tool', toolName: b.name, detail: toolDetail(b.input) });
           if (b.name === 'Skill' && b.input && b.input.skill) events.push({ ...base, role: 'skill', text: b.input.skill, via: 'tool' });
         }

@@ -1132,6 +1132,10 @@
             "toolOutputByTool": {
               "$ref": "#/$defs/counts"
             },
+            "toolInputByTool": {
+              "$ref": "#/$defs/counts",
+              "description": "Estimated tokens of the arguments the agent wrote for each tool (file contents for Write, old and new text for Edit)"
+            },
             "compactions": {
               "type": "number"
             },
