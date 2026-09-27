@@ -47,8 +47,8 @@
  *   --label <id>=<task>     Correct one session's task label (<id>= clears it)
  *   --label-accuracy        How often the rules agree with your corrected labels
  *   --demo                  Use a built-in month of synthetic sessions instead of your logs
- *   --retro                 Print only the retro (with --md: paste-ready markdown)
- *   --save-retro            Save this retro's action items so the next one reviews them
+ *   --retro                 Print only the monthly review (with --md: markdown)
+ *   --save-retro            Save this review's actions so the next one shows whether they worked
  *   --period <date>         Review the period containing <date> (default: the last completed one)
  *   --scope <s>             Limit the whole analysis to current | last | all (default all)
  *   --cycle-start <date>    Review in cycles instead of calendar months: any cycle's first day
@@ -163,7 +163,7 @@ export function writeCycleConfig(cycle) {
   return cfg;
 }
 
-/** All sessions in view, at a glance (the retro covers one period; this covers everything). */
+/** All sessions in view, at a glance (the review covers one period; this covers everything). */
 function overview(a, sessions) {
   const tasks = Object.entries(a.tasks || {}).slice(0, 3).map(([id, t]) => ({ id, label: t.label, share: t.share }));
   return {
@@ -174,17 +174,17 @@ function overview(a, sessions) {
 }
 
 // ---------------------------------------------------------------------------
-// Saved retros — action items and metric baselines, so the next retro can review them
+// Saved reviews — actions and metric baselines, so the next review can show whether they worked
 // ---------------------------------------------------------------------------
 const retrosDir = () => path.join(home(), '.agent-retro', 'retros');
-/** The most recently saved retro, or null. */
+/** The most recently saved review, or null. */
 export function latestRetro() {
   let files = [];
   try { files = fs.readdirSync(retrosDir()).filter((f) => /^\d{4}-\d{2}-\d{2}.*\.json$/.test(f)).sort(); } catch { return null; }
   for (const f of files.reverse()) { try { return JSON.parse(fs.readFileSync(path.join(retrosDir(), f), 'utf8')); } catch { /* skip unreadable */ } }
   return null;
 }
-/** Save the retro's action items and baselines. Returns the file written. */
+/** Save the review's actions and baselines. Returns the file written. */
 export function saveRetro(retro) {
   const snap = retroSnapshot(retro);
   fs.mkdirSync(retrosDir(), { recursive: true });
@@ -554,52 +554,48 @@ function bar(v, max, width = 30) { return '█'.repeat(max ? Math.round((v / max
 const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v * 100) + '%' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+v.toFixed(2)));
 const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `${t.period} vs the ${t.unit} before`);
 
-const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['start', 'Start'], ['stop', 'Stop']];
-
+const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['change', 'Change']];
+const reviewTitle = (r) => (r.period.unit === 'cycle' ? 'Cycle review' : 'Monthly review');
 const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.name}${r.period.current ? ' (in progress)' : ''}`);
+const MARK = { text: { better: '✓', worse: '✗' }, md: { better: '✅', worse: '❌' } };
 
 function retroText(r) {
   if (!r) return [];
-  const L = ['', `=== RETRO · ${retroPeriod(r)} ===`, `  ${r.headline}`];
+  const L = ['', `=== ${reviewTitle(r).toUpperCase()} · ${retroPeriod(r)} ===`, `  ${r.headline}`];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push('', `  ${title.toUpperCase()}`);
     if (!r[key].length) L.push('    —');
-    for (const it of r[key]) L.push(`    • ${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
+    for (const it of r[key]) L.push(`    • ${it.kind ? `[${it.kind}] ` : ''}${it.text}${it.detail ? `\n      ${it.detail}` : ''}`);
   }
-  L.push('', '  ACTION ITEMS');
+  L.push('', '  DO NEXT');
   if (!r.actions.length) L.push('    —');
   r.actions.forEach((x, i) => L.push(`    ${i + 1}. [ ] ${x.title}${x.metric ? `  (watch: ${x.metric.label}, now ${x.metric.display})` : ''}`));
-  L.push('', '  KAIZEN');
-  const k = r.kaizen;
-  if (k.review) {
-    L.push(`    Since the retro saved ${k.review.savedAt.slice(0, 10)}:`);
-    for (const it of k.review.items) L.push(`      ${it.verdict === 'better' ? '✓' : it.verdict === 'worse' ? '✗' : '·'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}${it.stillOpen ? ' · still recommended' : ''}`);
-  }
-  if (k.experiment) L.push(`    Experiment for the next ${k.experiment.span}: ${k.experiment.title}.`, `    Measure: ${k.experiment.metric.label}, now ${k.experiment.metric.display}. Check with: ${k.experiment.check}`);
-  if (!k.review) L.push('    Save this retro (--save-retro) so the next one reviews how these action items went.');
+  if (r.experiment) L.push('', '  EXPERIMENT', `    For the next ${r.experiment.span}: ${r.experiment.title}.`, `    Measure: ${r.experiment.metric.label}, now ${r.experiment.metric.display}. Check with: ${r.experiment.check}`);
+  L.push('', '  DID IT WORK?');
+  if (r.followUp) {
+    L.push(`    Since the review saved ${r.followUp.savedAt.slice(0, 10)}:`);
+    for (const it of r.followUp.items) L.push(`      ${MARK.text[it.verdict] || '·'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}${it.stillOpen ? ' · still recommended' : ''}`);
+  } else L.push('    Save this review (--save-retro), and the next one shows how these actions went.');
   return L;
 }
 
 export function retroMd(r) {
   if (!r) return [];
-  const L = [`## Retro: ${retroPeriod(r)}`, '', r.headline, ''];
+  const L = [`## ${reviewTitle(r)}: ${retroPeriod(r)}`, '', r.headline, ''];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push(`### ${title}`, '');
     if (!r[key].length) L.push('- —');
-    for (const it of r[key]) L.push(`- **${it.text}**${it.detail ? ` ${it.detail}` : ''}`);
+    for (const it of r[key]) L.push(`- ${it.kind ? `_${it.kind}_ ` : ''}**${it.text}**${it.detail ? ` ${it.detail}` : ''}`);
     L.push('');
   }
-  L.push('### Action items', '');
+  L.push('### Do next', '');
   if (!r.actions.length) L.push('- —');
   for (const x of r.actions) L.push(`- [ ] **${x.title}**${x.metric ? ` (watch ${x.metric.label}, now ${x.metric.display})` : ''}`);
-  L.push('', '### Kaizen', '');
-  const k = r.kaizen;
-  if (k.review) {
-    L.push(`Since the retro saved ${k.review.savedAt.slice(0, 10)}:`, '');
-    for (const it of k.review.items) L.push(`- ${it.verdict === 'better' ? '✅' : it.verdict === 'worse' ? '❌' : '➖'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}`);
-    L.push('');
+  if (r.experiment) L.push('', '### Experiment', '', `For the next ${r.experiment.span}: **${r.experiment.title}**. Measure ${r.experiment.metric.label} (now ${r.experiment.metric.display}); check with \`${r.experiment.check}\`.`);
+  if (r.followUp) {
+    L.push('', '### Did it work?', '', `Since the review saved ${r.followUp.savedAt.slice(0, 10)}:`, '');
+    for (const it of r.followUp.items) L.push(`- ${MARK.md[it.verdict] || '➖'} ${it.title}${it.metric ? `: ${it.metric} ${it.baseline} → ${it.now} (${it.verdict})` : ''}`);
   }
-  if (k.experiment) L.push(`**Experiment for the next ${k.experiment.span}:** ${k.experiment.title}. Measure ${k.experiment.metric.label} (now ${k.experiment.metric.display}); check with \`${k.experiment.check}\`.`);
   return L;
 }
 
@@ -916,7 +912,7 @@ async function main() {
 
   if (o.saveRetro) {
     const file = saveRetro(analysis.retro);
-    console.error(`[agent-retro] retro saved to ${file}; the next retro will review its action items.`);
+    console.error(`[agent-retro] review saved to ${file}; the next review shows whether its actions worked.`);
     if (!o.retro) return;
   }
   if (o.retro) { console.log((o.format === 'md' ? retroMd(analysis.retro) : retroText(analysis.retro)).join('\n').replace(/^\n/, '')); return; }

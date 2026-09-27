@@ -215,7 +215,7 @@ export function writeDemo(home) {
   put('.claude/settings.json', J({ enabledPlugins: { 'review-kit@community': true, 'plan-kit@community': true, 'legacy-tools@internal': true } }));
   put('.claude.json', J({ mcpServers: { linear: { command: 'linear-mcp' } } }));
   fs.mkdirSync(path.join(home, '.claude/skills/deploy-notes'), { recursive: true });
-  // a retro "saved" five weeks ago, so the demo's Kaizen block has something to review
+  // a review "saved" five weeks ago, so the demo's "Did it work?" block has something to show
   const saved = new Date(now - 35 * 864e5).toISOString(); // saved at the end of an earlier month's review
   put(`.agent-retro/retros/${saved.slice(0, 10)}.json`, J({ version: 1, savedAt: saved, period: null, actions: [
     { id: 'screenshots', title: 'Read pages as text instead of screenshots', metric: 'browserOutputShare', baseline: 0.85 },

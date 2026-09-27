@@ -526,7 +526,7 @@ test('cli: --scope last keeps each session of that month whole, spend included',
   assert.equal(spawnSync(process.execPath, [CLI, '--demo', '--scope', 'sprint'], { encoding: 'utf8' }).status, 2, 'unknown scope');
 });
 
-test('retro: columns, caps, action metrics and the Kaizen review of a saved retro', async () => {
+test('review: columns, caps, action metrics and "Did it work?" for a saved review', async () => {
   const { buildRetro, retroSnapshot } = await import('./retro.mjs');
   const { buildSessions } = await import('./sessions.mjs');
   const T = Date.parse('2026-05-20T10:00:00Z');
@@ -551,21 +551,20 @@ test('retro: columns, caps, action metrics and the Kaizen review of a saved retr
   assert.equal(r.card.topTask.id, 'feature');
   assert.deepEqual(r.wentWell.map((x) => x.text), ['Failed tool calls: 10% → 5%', '90% of input served from cache', 'No secret access or destructive commands']);
   assert.deepEqual(r.didntGoWell.map((x) => x.text), ['Context is heavy.', '“Continue” prompts: 10% → 50%']);
-  assert.deepEqual(r.start.map((x) => x.recId), ['screenshots']);
-  assert.deepEqual(r.stop.map((x) => x.recId), ['check-ins', 'unused-mcp']);
-  assert.equal(r.start[0].detail, 'Read text.');
+  assert.deepEqual(r.change.map((x) => [x.kind, x.recId]), [['start', 'screenshots'], ['stop', 'check-ins'], ['stop', 'unused-mcp']], 'habits to start first, then things to stop');
+  assert.equal(r.change[0].detail, 'Read text.');
   assert.deepEqual(r.actions.map((x) => x.id), ['screenshots', 'check-ins'], 'only recommendations with a fix');
   assert.equal(r.actions[1].metric.display, '50%', 'ackRate of the period: 3 of 6 prompts');
-  assert.equal(r.kaizen.review, null);
-  assert.equal(r.kaizen.experiment.metric.key, 'ackRate', 'first action item with a measurable metric');
+  assert.equal(r.followUp, null);
+  assert.equal(r.experiment.metric.key, 'ackRate', 'first action item with a measurable metric');
   const snap = retroSnapshot(r);
   assert.deepEqual(snap.actions[1], { id: 'check-ins', title: 'Cut check-ins', metric: 'ackRate', baseline: 0.5 });
   const later = buildRetro(analysis, sessions, { ...snap, actions: [{ ...snap.actions[1], baseline: 0.8 }] });
-  assert.deepEqual(later.kaizen.review.items[0], { title: 'Cut check-ins', metric: '“Continue” prompts', baseline: '80%', now: '50%', verdict: 'better', stillOpen: true });
+  assert.deepEqual(later.followUp.items[0], { title: 'Cut check-ins', metric: '“Continue” prompts', baseline: '80%', now: '50%', verdict: 'better', stillOpen: true });
   assert.equal(buildRetro({ recommendations: [], tasks: {}, prompting: { practices: [] } }, [], null).headline, 'No sessions in this period yet.');
   assert.equal(r.thin, true, 'three sessions are too few to judge');
   assert.match(r.verdict, /^3 sessions so far: too few to judge this month$/);
-  assert.equal(r.kaizen.experiment.span, 'month');
+  assert.equal(r.experiment.span, 'month');
 });
 
 test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', () => {
@@ -573,11 +572,11 @@ test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', 
   const run = (...args) => spawnSync(process.execPath, [CLI, '--demo', ...args], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8' });
   const md = run('--retro', '--md');
   assert.equal(md.status, 0, md.stderr);
-  for (const h of ['## Retro', '### Went well', "### Didn't go well", '### Start', '### Stop', '### Action items', '### Kaizen']) assert.ok(md.stdout.includes(h), h);
-  assert.match(md.stdout, /Since the retro saved/, 'the demo ships a saved retro');
+  for (const h of ['## Monthly review', '### Went well', "### Didn't go well", '### Change', '### Do next', '### Experiment', '### Did it work?']) assert.ok(md.stdout.includes(h), h);
+  assert.match(md.stdout, /Since the review saved/, 'the demo ships a saved review');
   const saved = run('--save-retro');
   assert.equal(saved.status, 0, saved.stderr);
-  assert.match(saved.stderr, /retro saved to .*agent-retro-demo-.*\.agent-retro\/retros\//, 'writes inside the demo home only');
+  assert.match(saved.stderr, /review saved to .*agent-retro-demo-.*\.agent-retro\/retros\//, 'writes inside the demo home only');
 });
 
 test('periods: calendar months by default, compared with the month before', async () => {
@@ -618,10 +617,10 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   assert.deepEqual(cfg().cycle, { start: '2026-02-25', days: 14 });
   const picked = run('--retro', '--period', '2026-03-01');
   assert.equal(picked.status, 0, picked.stderr);
-  assert.match(picked.stdout, /RETRO · 2026-02-25 → 2026-03-10/);
+  assert.match(picked.stdout, /CYCLE REVIEW · 2026-02-25 → 2026-03-10/);
   assert.equal(run('--save-cycle').status, 0);
   assert.equal(cfg().cycle, undefined);
-  assert.match(run('--retro', '--period', '2026-03-01').stdout, /RETRO · March 2026/);
+  assert.match(run('--retro', '--period', '2026-03-01').stdout, /MONTHLY REVIEW · March 2026/);
 });
 
 // --- regressions from the code review ------------------------------------------

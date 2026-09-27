@@ -648,14 +648,15 @@
                 "period",
                 "card",
                 "headline",
+                "verdict",
                 "wentWell",
                 "didntGoWell",
-                "start",
-                "stop",
+                "change",
                 "actions",
-                "kaizen"
+                "experiment",
+                "followUp"
               ],
-              "description": "The analysis as a personal retrospective of one review period (a calendar month by default, or a configured cycle), compared with the period before.",
+              "description": "The analysis as a personal review of one period (a calendar month by default, or a configured cycle), compared with the period before.",
               "properties": {
                 "wentWell": {
                   "type": "array",
@@ -705,39 +706,23 @@
                     }
                   }
                 },
-                "start": {
+                "change": {
                   "type": "array",
                   "items": {
                     "type": "object",
                     "required": [
+                      "kind",
                       "text",
                       "section"
                     ],
                     "properties": {
-                      "text": {
-                        "type": "string"
+                      "kind": {
+                        "enum": [
+                          "start",
+                          "stop"
+                        ],
+                        "description": "A habit to start, or something to stop or remove"
                       },
-                      "detail": {
-                        "type": "string"
-                      },
-                      "section": {
-                        "type": "string"
-                      },
-                      "recId": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                },
-                "stop": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "text",
-                      "section"
-                    ],
-                    "properties": {
                       "text": {
                         "type": "string"
                       },
@@ -762,13 +747,25 @@
                       "title",
                       "level"
                     ]
-                  }
+                  },
+                  "description": "Do next: the top changes with a fix, each with the metric that shows whether it worked"
                 },
-                "kaizen": {
-                  "type": "object",
+                "experiment": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "One action to measure over the next period"
+                },
+                "followUp": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Did it work?: the last saved review's actions, baseline → now",
                   "required": [
-                    "experiment",
-                    "review"
+                    "savedAt",
+                    "items"
                   ]
                 }
               }
@@ -1142,7 +1139,7 @@
               ]
             }
           },
-          "description": "Agent working time (gaps between its consecutive actions, each \u226430 min), your time to reply, and longer gaps (away)."
+          "description": "Agent working time (gaps between its consecutive actions, each ≤30 min), your time to reply, and longer gaps (away)."
         }
       },
       "additionalProperties": false

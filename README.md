@@ -31,8 +31,8 @@ From a clone: `node agent-retro.mjs …` takes the same flags.
 also where the screenshots below come from.
 
 ![Home: a one-line verdict, five areas with a status, a peek at the one you pick, what to do next and whether last month's changes worked](docs/images/home.jpg)
-![Your monthly retro: period card and Went well / Didn't go well / Start / Stop](docs/images/retro.jpg)
-![Action items with fixes, and Kaizen reviewing the last saved retro](docs/images/retro-actions.jpg)
+![Your monthly review: period card and Went well / Didn't go well / Change](docs/images/review.jpg)
+![Do next with fixes and an experiment, and Did it work? for the last saved review](docs/images/review-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
 ![Extensions: plugins, skills, MCP servers and hooks, loaded versus used](docs/images/extensions.jpg)
 
@@ -82,10 +82,10 @@ at a median of 14 turns, mostly by hand with `git diff`".
 The rules are the `TASKS` table in `sessions.mjs`, one row per task. See
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## The retro
+## The monthly review
 
-The retro is a personal review of one period of your agent use, a calendar month by default,
-compared with the month before:
+The review looks back at one period of your agent use, a calendar month by default, compared
+with the month before:
 
 - **Period card:** sessions, spend, agent hours, main task, and a one-line verdict ("biggest win,
   biggest drag"). With fewer than 5 sessions it says there are too few to judge, rather than
@@ -93,12 +93,14 @@ compared with the month before:
 - **Went well:** metrics that improved on the month before, prompt practices that work for you,
   clean risk signals.
 - **Didn't go well:** the patterns worth acting on, and metrics that got worse.
-- **Start / Stop:** the recommendations, split into habits to add and things to remove.
-- **Action items:** the top three changes, each with a fix to paste and the metric to watch.
-- **Kaizen:** one measured experiment. **Save this retro** (or `--save-retro`), and the next
-  retro reviews each saved action item: baseline → now, better or worse.
+- **Change:** the recommendations, each tagged *start* (a habit to add) or *stop* (something to
+  remove).
+- **Do next:** the top three changes, each with a fix to paste and the metric to watch, plus one
+  experiment to measure over the next month.
+- **Did it work?** **Save this review** (or `--save-retro`), and the next review shows each saved
+  action: baseline → now, better or worse.
 
-**Review periods.** Periods are calendar months. The retro reviews the last **completed** month
+**Review periods.** Periods are calendar months. The review covers the last **completed** month
 and compares it with the one before; `--period <date>` reviews the period containing any date.
 If your work runs in fixed cycles instead, give any cycle's first day and its length, under
 *Settings* in the dashboard or:
@@ -120,8 +122,8 @@ To keep it as markdown, in your notes or next to the code:
 npx agent-retro --retro --md
 ```
 
-Saved retros live in `~/.agent-retro/retros/`. They hold action ids and metric baselines only,
-never prompt text. `get_retro` on the MCP server returns the same retro, for "how did my agent use go
+Saved reviews live in `~/.agent-retro/retros/`. They hold action ids and metric baselines only,
+never prompt text. `get_retro` on the MCP server returns the same review, for "how did my agent use go
 last month?" in Claude Code.
 
 ## Prompt practices
@@ -245,7 +247,7 @@ claude mcp add agent-retro -- node /path/to/agent-retro.mjs --mcp --all-agents
 | `get_session` | One record by id |
 | `get_task_profile` | One task's stats plus the ids of its costliest and longest sessions |
 | `get_recommendations` | The recommendations above, with evidence and fixes, for the agent to present to you |
-| `get_retro` | The retro for one period: card, Went well / Didn't go well / Start / Stop, action items and Kaizen |
+| `get_retro` | The review of one period: card, Went well / Didn't go well / Change, Do next, the experiment and Did it work? |
 | `get_extensions` | Plugins, skills, MCP servers, hooks and slash commands, optionally filtered by kind or verdict |
 
 It speaks JSON-RPC 2.0 over stdio with no SDK dependency. It serves exactly the same views as the
@@ -285,8 +287,8 @@ period.
 - **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
   areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
   to peek at its chart without leaving Home. *What should I change?* The top three changes, each
-  with a fix to copy. *Is it working?* How the action items from your last saved retro moved.
-- **Retro.** The period card, Went well / Didn't go well / Start / Stop, action items and Kaizen,
+  with a fix to copy. *Is it working?* How the actions from your last saved review moved.
+- **Review.** The period card, Went well / Didn't go well / Change, Do next and Did it work?,
   then every recommendation with its fix and the metrics compared with the month before.
 - **Work.** Tasks with per-session medians (select one to list its sessions, or open its
   playbook), how sessions go, and what the agent does: tools, why they fail, shell commands and
@@ -299,7 +301,7 @@ period.
   openings that could say more.
 - **Sessions.** Search, filter and sort every session, with a detail panel where you can correct
   its task label.
-- **Summary** turns the retro into a short report to read, with a button that copies it as
+- **Summary** turns the review into a short report to read, with a button that copies it as
   markdown.
 
 Every page and section is a link (`#cost`, `#extensions`, …).

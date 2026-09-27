@@ -2,9 +2,9 @@
  * retro.mjs — the analysis as a personal retrospective of one review period (a month by default).
  *
  * buildRetro(analysis, sessions, previous) arranges what the rest of the pipeline already found
- * into the retro format: a period card, then Went well / Didn't go well / Start / Stop, Action
- * items, and a Kaizen block — one measured experiment, plus a review of the last saved retro's
- * action items (baseline → now). No new analysis happens here; every item points at the section
+ * into a review: a period card, then Went well / Didn't go well / Change (things to start or
+ * stop), Do next (the top actions), one measured experiment, and Did it work? — the last saved
+ * review's actions, baseline → now. No new analysis happens here; every item points at the section
  * holding its numbers.
  */
 import { TREND_METRICS, compareMetric, localDate, periodName, MIN_PERIOD_SESSIONS } from './sessions.mjs';
@@ -17,7 +17,7 @@ const WIN = { costPerSession: 'Cheaper sessions', tokensPerSession: 'Leaner sess
 const DRAG = { costPerSession: 'spend per session went up', tokensPerSession: 'sessions got heavier', toolErrorRate: 'more tool calls failed', highContextShare: 'your context ran hot', browserOutputShare: 'screenshots crowded the context', ackRate: 'more “continue?” check-ins', correctionRate: 'more corrections', listingTokensPerSession: 'your setup got heavier', sensitivePerSession: 'more secret-file access',
   'context-source': 'tool output crowds your context', 'context-pressure': 'your context ran hot', corrections: 'you corrected the agent often', 'error-bursts': 'tools failed in bursts', risk: 'a few risky operations' };
 
-/** Recommendations that add a habit go under Start; ones that remove something under Stop. */
+/** Recommendations that remove something are tagged "stop"; the rest add a habit ("start"). */
 const STOP = new Set(['unused-plugins', 'unused-skills', 'unused-mcp', 'check-ins', 'heavy-hooks', 'heavy-skills']);
 
 const pct = (x) => Math.round(x * 100) + '%';
@@ -77,12 +77,11 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   for (const f of (a.findings || [])) if (f.level === 'attention') didntGoWell.push({ text: f.title, detail: f.detail, section: f.section });
   for (const [key, m] of trend) if (m.verdict === 'worse' && !didntGoWell.some((x) => x.text.startsWith(m.label))) didntGoWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
 
-  // Start / Stop
-  const toItem = (r) => ({ text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
-  const start = recs.filter((r) => !STOP.has(r.id)).map(toItem);
-  const stop = recs.filter((r) => STOP.has(r.id)).map(toItem);
+  // Change: habits to start first, then things to stop
+  const toItem = (kind) => (r) => ({ kind, text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
+  const change = [...recs.filter((r) => !STOP.has(r.id)).slice(0, MAX).map(toItem('start')), ...recs.filter((r) => STOP.has(r.id)).slice(0, MAX).map(toItem('stop'))];
 
-  // Action items: the top three with a fix, each with the metric that will show whether it worked
+  // Do next: the top three with a fix, each with the metric that will show whether it worked
   const metricNow = (key) => (TREND_METRICS[key] ? TREND_METRICS[key].of(list) : null);
   const actions = recs.filter((r) => r.fix).slice(0, 3).map((r) => {
     const key = REC_METRIC[r.id];
@@ -90,20 +89,18 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
     return { id: r.id, title: r.title, level: r.level, fix: r.fix, ...(key && now != null && { metric: { key, label: TREND_METRICS[key].label, now, display: formatMetric(key, now) } }) };
   });
 
-  // Kaizen: one experiment, and the review of the last saved retro
+  // One experiment to measure, and Did it work?: the last saved review's actions, baseline → now
   const exp = actions.find((x) => x.metric);
-  const kaizen = {
-    experiment: exp ? { title: exp.title, metric: exp.metric, span: cycle ? `${cycle.days} days` : 'month',
-      check: `agent-retro --retro at the end of next ${unit}` } : null,
-    review: previous ? {
-      savedAt: previous.savedAt,
-      items: (previous.actions || []).map((p) => {
-        const now = p.metric ? metricNow(p.metric) : null;
-        const c = p.metric ? compareMetric(p.metric, p.baseline, now) : null;
-        return { title: p.title, metric: p.metric ? TREND_METRICS[p.metric].label : null, baseline: p.metric ? formatMetric(p.metric, p.baseline) : null, now: p.metric ? formatMetric(p.metric, now) : null, verdict: c ? c.verdict : 'unmeasured', stillOpen: recs.some((r) => r.id === p.id) };
-      }),
-    } : null,
-  };
+  const experiment = exp ? { title: exp.title, metric: exp.metric, span: cycle ? `${cycle.days} days` : 'month',
+    check: `agent-retro --retro at the end of next ${unit}` } : null;
+  const followUp = previous ? {
+    savedAt: previous.savedAt,
+    items: (previous.actions || []).map((p) => {
+      const now = p.metric ? metricNow(p.metric) : null;
+      const c = p.metric ? compareMetric(p.metric, p.baseline, now) : null;
+      return { title: p.title, metric: p.metric ? TREND_METRICS[p.metric].label : null, baseline: p.metric ? formatMetric(p.metric, p.baseline) : null, now: p.metric ? formatMetric(p.metric, now) : null, verdict: c ? c.verdict : 'unmeasured', stillOpen: recs.some((r) => r.id === p.id) };
+    }),
+  } : null;
 
   const win = wentWell[0], drag = didntGoWell[0];
   const better = trend.find(([k, m]) => m.verdict === 'better' && WIN[k]);
@@ -122,12 +119,12 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   return {
     period: { name: periodName(window, cycle), unit, from: iso(from), to: iso(to ? to - 1 : null), days: from ? Math.round((to - from) / 864e5) : null, current: !!(window && window.current) },
     card, headline, verdict, thin,
-    wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), start: start.slice(0, MAX), stop: stop.slice(0, MAX),
-    actions, kaizen,
+    wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), change,
+    actions, experiment, followUp,
   };
 }
 
-/** What a saved retro keeps: its action items and their metric baselines — no prompt text. */
+/** What a saved review keeps: its actions and their metric baselines — no prompt text. */
 export function retroSnapshot(retro) {
   return {
     version: 1, savedAt: new Date().toISOString(), period: retro.period,

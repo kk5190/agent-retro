@@ -322,19 +322,21 @@
   .digest li b { color: var(--ink); }
   .digest .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
 
-  /* Retro board ------------------------------------------------------------------ */
+  /* Review board ----------------------------------------------------------------- */
   .card { margin: 24px 0 18px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
   .card .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
   .card .nums div b { display: block; font: 600 26px/1.15 var(--display); letter-spacing: -0.02em; }
   .card .nums div span { font-size: 12.5px; color: var(--ink-3); }
   .card p { margin: 14px 0 0; font: 500 16px/1.45 var(--display); color: var(--ink); max-width: 80ch; }
-  .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .board { grid-template-columns: 1fr; } }
   .col { background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 12px; padding: 14px 14px 6px; min-width: 0; }
   .col h3 { margin: 0 0 10px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); display: flex; justify-content: space-between; }
   .col h3 span { color: var(--ink-3); font-weight: 500; }
-  .col.good { --c: #2e8a63; } .col.bad { --c: var(--alert); } .col.start { --c: var(--signal); } .col.stop { --c: var(--ink-3); }
+  .col.good { --c: #2e8a63; } .col.bad { --c: var(--alert); } .col.change { --c: var(--signal); }
+  .note .kind, .digest .kind { display: inline-block; font: 600 10.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--rule); border-radius: 5px; padding: 0 5px; margin-right: 6px; vertical-align: 1px; }
+  .note .kind.start, .digest .kind.start { color: var(--signal); border-color: color-mix(in srgb, var(--signal) 40%, transparent); }
   @media (prefers-color-scheme: dark) { .col.good { --c: #6fd3a4; } }
   .note { padding: 10px 0; border-top: 1px solid var(--rule); font-size: 13.5px; }
   .note:first-of-type { border-top: 0; padding-top: 2px; }
@@ -368,7 +370,7 @@
     <div class="brand">agent-retro</div>
     <nav class="tabs" aria-label="Pages">
       <a href="#home" data-page="home">Home</a>
-      <a href="#retro" data-page="retro">Retro</a>
+      <a href="#review" data-page="review">Review</a>
       <a href="#work" data-page="work">Work</a>
       <a href="#cost" data-page="cost">Cost</a>
       <a href="#setup" data-page="setup">Setup</a>
@@ -426,19 +428,19 @@
       <div class="peek panel" id="peek" aria-live="polite"></div>
       <div class="grid g2 gap">
         <div class="panel"><h3>Do next</h3><p class="hint">The changes with the most impact, from your own numbers. Each has a fix to paste.</p><ol class="actions" id="homeActions"></ol></div>
-        <div class="panel"><h3>Is it working?</h3><p class="hint">How the action items from your last saved retro moved.</p><div id="homeKaizen"></div></div>
+        <div class="panel"><h3>Is it working?</h3><p class="hint">How the actions from your last saved review moved.</p><div id="homeFollowUp"></div></div>
       </div>
     </section>
   </div>
-  <div class="page" id="page-retro" hidden>
-    <section id="retro-board" class="intro">
-      <h1 id="retroTitle">Retro</h1>
+  <div class="page" id="page-review" hidden>
+    <section id="review-board" class="intro">
+      <h1 id="retroTitle">Monthly review</h1>
       <p id="scope">Reading your local agent logs…</p>
       <div class="card" id="periodCard"></div>
       <div class="board" id="board"></div>
       <div class="grid g2 gap retro-foot">
-        <div class="panel"><h3>Action items</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol></div>
-        <div class="panel"><h3>Kaizen</h3><p class="hint">One small experiment, measured. Save the retro and the next one checks how its action items moved.</p><div id="kaizen"></div></div>
+        <div class="panel"><h3>Do next</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol><div id="experiment"></div></div>
+        <div class="panel"><h3>Did it work?</h3><p class="hint">Save this review, and the next one shows how its actions moved: baseline → now.</p><div id="followUp"></div></div>
       </div>
     </section>
 
@@ -811,7 +813,7 @@ function renderPeriod(a) {
   const cap = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
   document.querySelector('[data-scope=current]').textContent = `This ${UNIT}`;
   document.querySelector('[data-scope=last]').textContent = `Last ${UNIT}`;
-  $('retroTitle').textContent = `${cap}ly retro`.replace('Cyclely', 'Cycle');
+  $('retroTitle').textContent = UNIT === 'cycle' ? 'Cycle review' : 'Monthly review';
   if (p.cycle) { $('cycleStart').value = p.cycle.start; $('cycleDays').value = String(p.cycle.days); }
   $('cycleNow').textContent = p.cycle ? `Now: ${p.cycle.days}-day cycles from ${dateStr(p.cycle.start)}.` : 'Now: calendar months.';
 }
@@ -831,20 +833,20 @@ function renderSummary(a, sessions) {
       <div><b>${c.agentHours} h</b><span>of agent work</span></div>
       <div><b>${c.topTask ? esc(c.topTask.label) : '—'}</b><span>${c.topTask ? `main task, ${rate(c.topTask.share)} of sessions` : 'main task'}</span></div>
     </div><p>${esc(r.headline)}</p>`;
-  const COLS = [['wentWell', 'Went well', 'good'], ['didntGoWell', "Didn't go well", 'bad'], ['start', 'Start', 'start'], ['stop', 'Stop', 'stop']];
-  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this time.</p>'}</div>`).join('');
+  const COLS = [['wentWell', 'Went well', 'good'], ['didntGoWell', "Didn't go well", 'bad'], ['change', 'Change', 'change']];
+  $('board').innerHTML = COLS.map(([k, title, cls]) => `<div class="col ${cls}"><h3>${title}<span>${r[k].length}</span></h3>${r[k].length ? r[k].map((it) => `<div class="note"><b>${it.kind ? `<span class="kind ${it.kind}">${it.kind}</span>` : ''}${esc(it.text)}</b>${it.detail ? `<span>${esc(it.detail)}</span>` : ''}<a href="#${it.recId ? 'rec-' + esc(it.recId) : esc(it.section)}">Details →</a></div>`).join('') : '<p class="empty">Nothing here this time.</p>'}</div>`).join('');
   $('actions').innerHTML = r.actions.length ? r.actions.map((x, i) => `<li><b>${esc(x.title)}</b><button type="button" data-afix="${i}">Copy fix</button><small>${x.metric ? `Watch: ${esc(x.metric.label)}, now <strong>${esc(x.metric.display)}</strong>` : `Fix: ${esc(FIX_LABEL[x.fix.kind] || 'Fix')} ${esc(x.fix.target)}`}</small></li>`).join('') : '<p class="empty">No action items: nothing crossed a threshold.</p>';
   $('actions').querySelectorAll('[data-afix]').forEach((b) => b.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(r.actions[Number(b.dataset.afix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
     setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
   }));
-  const k = r.kaizen;
   const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
-  $('kaizen').innerHTML = (k.review ? `<div style="font-size:12.5px;color:var(--ink-3)">Since the retro saved ${esc(dateStr(k.review.savedAt.slice(0, 10)))}</div>` + k.review.items.map((it) => `<div class="kz-item"><i>${mark[it.verdict] || '·'}</i><div><b>${esc(it.title)}</b>${it.metric ? `<br><span style="color:var(--ink-3);font-size:12.5px">${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('') : '')
-    + (k.experiment ? `<div class="kz-exp"><b>Experiment for the next ${esc(k.experiment.span)}:</b> ${esc(k.experiment.title)}.<br>Measure ${esc(k.experiment.metric.label)}, now <b>${esc(k.experiment.metric.display)}</b>. Check with <code>${esc(k.experiment.check)}</code>.</div>` : '<p class="empty">No measurable experiment this time.</p>')
-    + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this retro</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`;
+  const x = r.experiment, f = r.followUp;
+  $('experiment').innerHTML = x ? `<div class="kz-exp"><b>Experiment for the next ${esc(x.span)}:</b> ${esc(x.title)}.<br>Measure ${esc(x.metric.label)}, now <b>${esc(x.metric.display)}</b>. Check with <code>${esc(x.check)}</code>.</div>` : '';
+  $('followUp').innerHTML = (f ? `<div style="font-size:12.5px;color:var(--ink-3)">Since the review saved ${esc(dateStr(f.savedAt.slice(0, 10)))}</div>` + f.items.map((it) => `<div class="kz-item"><i>${mark[it.verdict] || '·'}</i><div><b>${esc(it.title)}</b>${it.metric ? `<br><span style="color:var(--ink-3);font-size:12.5px">${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})${it.stillOpen ? ' · still recommended' : ''}</span>` : ''}</div></div>`).join('') : '<p class="empty">No saved review yet.</p>')
+    + `<div class="kz-save"><button type="button" id="saveRetro" class="primary">Save this review</button> <span class="status" id="saveStatus" style="text-align:left"></span></div>`;
   $('saveRetro').addEventListener('click', async () => {
-    try { await postJson('/api/retro/save?' + query(), {}); $('saveStatus').textContent = 'Saved. The next retro will review these action items.'; }
+    try { await postJson('/api/retro/save?' + query(), {}); $('saveStatus').textContent = 'Saved. The next review shows how these actions went.'; }
     catch (e) { $('saveStatus').textContent = 'Could not save: ' + e.message; }
   });
 }
@@ -1285,7 +1287,7 @@ let keepSession = null;
 
 /* ---- section rail ---- */
 /* ---- pages: #home, #cost, … or any element id, which opens the page that holds it ---- */
-const PAGES = ['home', 'retro', 'work', 'cost', 'setup', 'habits', 'sessions', 'digest'];
+const PAGES = ['home', 'review', 'work', 'cost', 'setup', 'habits', 'sessions', 'digest'];
 function route() {
   const id = decodeURIComponent(location.hash.slice(1)) || 'home';
   const el = !PAGES.includes(id) && document.getElementById(id);
@@ -1379,25 +1381,26 @@ function renderHome(a) {
     try { await navigator.clipboard.writeText(recs[Number(b.dataset.hfix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
     setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
   }));
-  const k = r ? r.kaizen : null;
+  const f = r ? r.followUp : null, x = r ? r.experiment : null;
   const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
-  $('homeKaizen').innerHTML = k && k.review ? k.review.items.map((it) => `<div class="kz-line"><span>${mark[it.verdict] || '·'}</span><div><b>${esc(it.title)}</b><br><span style="color:var(--ink-3);font-size:12.5px">${it.metric ? `${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)}` : 'not measured'}</span></div></div>`).join('') + '<p style="margin:10px 0 0"><a href="#retro-board">Full retro →</a></p>'
-    : `<p class="empty">No saved retro yet. Open the <a href="#retro-board">retro</a> and choose “Save this retro”; next ${UNIT} this box shows what changed.</p>${k && k.experiment ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(k.experiment.title)}</b> (${esc(k.experiment.metric.label)}, now ${esc(k.experiment.metric.display)}).</p>` : ''}`;
+  $('homeFollowUp').innerHTML = f ? f.items.map((it) => `<div class="kz-line"><span>${mark[it.verdict] || '·'}</span><div><b>${esc(it.title)}</b><br><span style="color:var(--ink-3);font-size:12.5px">${it.metric ? `${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)}` : 'not measured'}</span></div></div>`).join('') + '<p style="margin:10px 0 0"><a href="#review-board">Full review →</a></p>'
+    : `<p class="empty">No saved review yet. Open the <a href="#review-board">review</a> and choose “Save this review”; next ${UNIT} this box shows what changed.</p>${x ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(x.title)}</b> (${esc(x.metric.label)}, now ${esc(x.metric.display)}).</p>` : ''}`;
 }
 const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
 
-/* ---- Digest: the retro as a short report to share ---- */
+/* ---- Summary: the review as a short report to read ---- */
 function renderDigest(a) {
   const r = a.retro;
   if (!r) { $('digest').innerHTML = '<p class="empty">Nothing to summarise yet.</p>'; return; }
   const li = (list) => (list.length ? `<ul>${list.map((it) => `<li><b>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : `<p class="empty">Nothing this ${r.period.unit}.</p>`);
-  const k = r.kaizen;
+  const f = r.followUp;
   $('digest').innerHTML = `<p class="eyebrow">${esc(r.period.unit === 'month' ? r.period.name : `${dateStr(r.period.from)} – ${dateStr(r.period.to)}`)}${r.period.current ? ' (in progress)' : ''} · ${r.card.sessions} sessions${r.card.spend ? ' · $' + Math.round(r.card.spend) : ''} · ${r.card.agentHours} h</p>
     <h2>${esc(r.verdict)}</h2><p>${esc(r.headline)}</p>
     <h3>What went well</h3>${li(r.wentWell)}
     <h3>What didn't</h3>${li(r.didntGoWell)}
-    <h3>Try next ${esc(r.period.unit)}</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">No action items.</p>'}
-    ${k.review ? `<h3>Experiments from the last saved retro</h3><ul>${k.review.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
+    <h3>What to change</h3>${r.change.length ? `<ul>${r.change.map((it) => `<li><b><span class="kind ${it.kind}">${it.kind}</span>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing to change.</p>'}
+    <h3>Try next ${esc(r.period.unit)}</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">Nothing to do next.</p>'}
+    ${f ? `<h3>Did it work?</h3><ul>${f.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
     <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Keep it in your notes, or next to the code.</span></div>`;
   $('copyMd').addEventListener('click', async () => {
     try { const md = await fetch('/api/retro.md?' + query()).then((x) => x.text()); await navigator.clipboard.writeText(md); $('copyStatus').textContent = 'Copied.'; }
