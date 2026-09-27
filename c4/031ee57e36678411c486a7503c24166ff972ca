@@ -1,0 +1,29 @@
+README.md
+  s_135e7898200b4f::t_27d36fd79eb0e5 296-298,300-301
+agent-retro.mjs
+  s_135e7898200b4f::t_02191521906f30 400-403
+ui/index.html
+  s_135e7898200b4f::t_02191521906f30 324-325,327-341,466-477,530-534,1622
+  s_135e7898200b4f::t_2e0b45936e5c89 326,344,647-651,773-774,1097-1098,1579-1580,1582-1583
+  s_135e7898200b4f::t_3bc872e56cee3d 646
+CHANGELOG.md
+  s_135e7898200b4f::t_27d36fd79eb0e5 49-50
+tests.mjs
+  s_135e7898200b4f::t_adae7865e319d5 653-656
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c4031ee57e36678411c486a7503c24166ff972ca",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
