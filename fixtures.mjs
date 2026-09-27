@@ -133,12 +133,12 @@ function prng(seed) {
 }
 
 const ARCHETYPES = [
-  { task: 'review', n: 8, title: (i) => `Review PR #${120 + i}`, prompt: (i) => `review PR #${120 + i} before I merge it`,
+  { task: 'review', n: 8, title: (i) => `Review PR #${120 + i}`, prompt: (i) => (i % 2 ? `review PR #${120 + i} before I merge it` : `review PR #${120 + i}, mainly src/api.ts, so that we can merge it today; don't touch the tests, reply with a short list of issues`),
     steps: (r, i) => [['Bash', { command: r() < 0.6 ? `gh pr diff ${120 + i}` : 'git diff main...HEAD' }, 'diff --git a/src/api.ts b/src/api.ts\n' + 'x'.repeat(3000)],
       ['Read', { file_path: '/home/dev/app/src/api.ts' }, 'y'.repeat(4000)],
       ...(r() < 0.4 ? [['Skill', { skill: 'review-kit:code-review' }, 'Launching skill']] : []),
       ...(r() < 0.3 ? [['Bash', { command: 'npm test' }, 'PASS  42 tests']] : [])] },
-  { task: 'debug', n: 8, title: () => 'Fix checkout crash', prompt: () => 'the checkout page crashes with TypeError: cannot read total, fix it',
+  { task: 'debug', n: 8, title: () => 'Fix checkout crash', prompt: (i) => (i % 3 ? 'the checkout page crashes with TypeError: cannot read total, fix it' : 'checkout crashes in src/checkout.ts with error: cannot read total. Fix it without changing the API, because mobile clients depend on it'),
     steps: (r) => [['Read', { file_path: '/home/dev/app/src/checkout.ts' }, 'z'.repeat(5000)],
       ['Edit', { file_path: '/home/dev/app/src/checkout.ts' }, 'ok'],
       ['Bash', { command: 'npm test' }, 'Exit code 1\nFAIL src/checkout.test.ts', true],
@@ -146,7 +146,7 @@ const ARCHETYPES = [
       ['Bash', { command: 'npm test' }, r() < 0.5 ? 'Exit code 1\nFAIL src/checkout.test.ts' : 'PASS', r() < 0.5],
       ['Edit', { file_path: '/home/dev/app/src/checkout.test.ts' }, 'ok'],
       ['Bash', { command: 'npm test' }, 'PASS']] },
-  { task: 'feature', n: 7, title: () => 'CSV export for reports', prompt: () => 'implement CSV export for the reports page',
+  { task: 'feature', n: 7, title: () => 'CSV export for reports', prompt: (i) => (i % 2 ? 'implement CSV export for the reports page' : 'add CSV export to src/reports.tsx so that finance can open reports in Excel; done when the button downloads all visible rows'),
     steps: (r) => [...(r() < 0.3 ? [['EnterPlanMode', {}, 'ok']] : []),
       ['Write', { file_path: '/home/dev/app/src/export/csv.ts' }, 'ok'], ['Edit', { file_path: '/home/dev/app/src/reports.tsx' }, 'ok'],
       ...(r() < 0.5 ? [['Bash', { command: 'npm test' }, 'PASS']] : []),

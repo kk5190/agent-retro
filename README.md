@@ -30,6 +30,7 @@ From a clone: `node agent-retro.mjs …` takes the same flags.
 `--demo` never reads your logs. It writes synthetic sessions to a temporary directory, which is
 also where the screenshots below come from.
 
+![Home: a one-line verdict, five areas with a status, a peek at the one you pick, what to do next and whether last sprint's changes worked](docs/images/home.jpg)
 ![Your agent retro: sprint card and Went well / Didn't go well / Start / Stop](docs/images/retro.jpg)
 ![Action items with fixes, and Kaizen reviewing the last saved retro](docs/images/retro-actions.jpg)
 ![What to change: recommendations with evidence and a fix to paste](docs/images/what-to-change.jpg)
@@ -98,7 +99,7 @@ activity, in the format many teams already use:
 
 **Your sprint calendar.** By default a sprint is the last 14 days of activity. To follow your
 team's real sprints, give any sprint's first day and the length: for example, two-week sprints
-starting on Wednesdays. You can do this under *Sprint settings* in the dashboard, or:
+starting on Wednesdays. You can do this under *Settings* in the dashboard, or:
 
 ```bash
 npx agent-retro --sprint-start 2026-09-16 --sprint-days 14 --save-sprint
@@ -106,11 +107,12 @@ npx agent-retro --sprint-start 2026-09-16 --sprint-days 14 --save-sprint
 
 Once a calendar is set:
 - The retro reviews the last **completed** sprint and compares it with the one before.
-- The sprint picker, or `--sprint <date>`, selects any earlier sprint.
+- `--sprint <date>` selects any earlier sprint.
 - The setting is saved in `~/.agent-retro/config.json`.
 
-**All sessions.** The retro covers one sprint. The *All sessions* overview and every section below
-it cover everything in view, narrowed by Project and Period.
+**One time period for everything.** The dashboard's *This sprint / Last sprint / All time* switch
+sets the period for every page, and sessions count in the sprint they started in. On the command
+line, `--scope sprint|last|all` does the same (all is the default).
 
 To post it to a team channel as markdown:
 
@@ -276,31 +278,31 @@ npx agent-retro --ui --open         # http://127.0.0.1:4173
 ```
 
 The dashboard (`ui/index.html`) is self-contained, loads no external assets, listens on localhost
-only, and follows your system's light or dark setting. It reads top to bottom as a report:
+only, and follows your system's light or dark setting. The header has the pages, one time-period
+switch (this sprint, last sprint, all time) and a Settings menu for the agent, project and sprint
+calendar.
 
-1. **Retro (this sprint).** A sprint picker and settings, a sprint card, then Went well / Didn't
-   go well / Start / Stop, action items, and Kaizen with a saved-retro review. The same retro opens
-   the terminal report.
-2. **Overview (all sessions).** Totals and the task mix for everything in view. Every section
-   below covers all sessions too.
-3. **What to change.** The recommendations, each with a copyable fix.
-4. **What you work on.** Tasks, with per-session medians. Select a task to list its sessions;
-   "How to do this better" jumps to that task's playbook.
-5. **Where the tokens go.** Spend, cache and context size; what fills the context (estimated), and
-   which tools return the most.
-6. **How sessions go.** "Continue" prompts, corrections, failed tool calls, time, session length.
-7. **What the agent does.** Kinds of action, most-used tools, why tools fail, shell commands, and
-   repeated command sequences.
-8. **Extensions.** Plugins, skills, MCP servers, hooks, subagents and slash commands, as sortable
-   tables with verdicts.
-9. **Risk.** Secret and key access, destructive commands, error bursts.
-10. **When you work.** Active days, streaks and peak hours; an activity calendar with one square
-    per day; and a weekday × hour punch card.
-11. **How you prompt.** Your style, prompt-engineering practices in your opening prompts compared
-    with how those sessions went, zero-, one- and few-shot shares, techniques, openings that could
-    say more, prompt length, and prompts you repeat.
-12. **Explore sessions.** Search, filter and sort, with a detail panel per session.
+- **Home** answers three questions on one screen. *How am I doing?* A one-line verdict, then five
+  areas (cost, context, reliability, prompting, setup), each marked good, watch or act. Pick an area
+  to peek at its chart without leaving Home. *What should I change?* The top three changes, each
+  with a fix to copy. *Is it working?* How the action items from your last saved retro moved.
+- **Retro.** The sprint card, Went well / Didn't go well / Start / Stop, action items and Kaizen,
+  then every recommendation with its fix and the metrics compared with the sprint before.
+- **Work.** Tasks with per-session medians (select one to list its sessions, or open its
+  playbook), how sessions go, and what the agent does: tools, why they fail, shell commands and
+  repeated sequences.
+- **Cost.** Spend, cache and context size; what fills the context (estimated); tokens per day.
+- **Setup.** Plugins, skills, MCP servers, hooks, subagents and slash commands, loaded versus used;
+  and risk: secret access, destructive commands, error bursts.
+- **Habits.** When you work (activity calendar, weekday × hour punch card) and how you prompt:
+  practices in your opening prompts compared with how those sessions went, shot types, and
+  openings that could say more.
+- **Sessions.** Search, filter and sort every session, with a detail panel where you can correct
+  its task label.
+- **Share this sprint** turns the retro into a short report, with a button that copies it as
+  markdown for a team channel.
 
+Every page and section is a link (`#cost`, `#extensions`, …).
 A collapsed "More detail" section holds agents compared, models, projects and typed slash commands.
 Every section starts with a line explaining what it measures and how to read it. The older topic,
 tone and "stage of work" breakdowns were removed: they were tuned to one person's prompts and

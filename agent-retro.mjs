@@ -53,6 +53,7 @@
  *   --sprint-days <n>       Sprint length in days (default 14)
  *   --save-sprint           Remember --sprint-start/--sprint-days in ~/.agent-retro/config.json
  *   --sprint <date>         Review the sprint containing <date> (default: the last completed one)
+ *   --scope <s>             Limit the whole analysis to sprint | last | all (default all)
  *   --no-history            Skip ~/.claude/history.jsonl
  *   --all-sources           Include SDK/system-injected prompts too
  *   --errors                Print parse warnings to stderr
@@ -114,6 +115,7 @@ function parseArgs(argv) {
       case '--sprint-start': o.sprintStart = next(); break;
       case '--sprint-days': o.sprintDays = Number(next()); break;
       case '--sprint': o.sprintPick = next(); break;
+      case '--scope': o.scope = next(); break;
       case '--save-sprint': o.saveSprint = true; break;
       case '--no-history': o.history = false; break;
       case '--all-sources': o.allSources = true; break;
@@ -207,28 +209,41 @@ export function writeLabel(sessionId, task) {
  *   sessions  — per-session telemetry records (sessions.mjs)
  *   analysis  — the rollup (analyze(), including the per-task profile)
  */
+/**
+ * Load every selected agent's events once and derive everything from that one stream.
+ * `o.scope` narrows the view: 'sprint' (the current sprint, or the last 14 days of activity),
+ * 'last' (the one before it) or 'all' (default). Trends always compare against the full history.
+ */
 export async function loadTelemetry(o) {
   const { events, files, parseErrors } = await loadEvents(o);
-  const data = eventsToData(events, o);
-  data.files = files; data.parseErrors = parseErrors;
-  const sessions = buildSessions(events, { ...o, labels: o.labels || readLabels() });
-  data.sessions = sessions.filter((s) => s.start).map((s) => ({ proj: s.project, turns: s.turns.assistant, first: s.start, last: s.end, agent: s.agent }));
-  const analysis = analyze(data, o, sessions);
+  const allSessions = buildSessions(events, { ...o, labels: o.labels || readLabels() });
   // Sprint: a calendar from flags or ~/.agent-retro/config.json, else a rolling 14 days
   const calendar = o.sprintStart ? { start: o.sprintStart, days: o.sprintDays || 14 } : readConfig().sprint || null;
-  const windows = sprintWindows(sessions, calendar);
+  const windows = sprintWindows(allSessions, calendar);
+  const current = windows[0] || null;
+  const previous = !current ? null : current.rolling ? { from: 2 * current.from - current.to, to: current.from, rolling: true } : windows[1] || null;
+  const scopeWindow = o.scope === 'sprint' ? current : o.scope === 'last' ? previous : null;
+  const inWindow = (t) => !scopeWindow || (t != null && t >= scopeWindow.from && t < scopeWindow.to);
+  const sessions = scopeWindow ? allSessions.filter((s) => inWindow(s.start)) : allSessions;
+  // scope events by session, like the retro: a session belongs to the sprint it started in (cost records carry no timestamp)
+  const inScope = scopeWindow && new Set(sessions.map((s) => `${s.agent}:${s.id}`));
+  const data = eventsToData(inScope ? events.filter((e) => inScope.has(`${e.agent}:${e.sessionId}`)) : events, o);
+  data.files = files; data.parseErrors = parseErrors;
+  data.sessions = sessions.filter((s) => s.start).map((s) => ({ proj: s.project, turns: s.turns.assistant, first: s.start, last: s.end, agent: s.agent }));
+  const analysis = analyze(data, o, sessions);
   const pick = o.sprintPick ? localDay(o.sprintPick) : null;
-  const selected = (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultSprint(windows);
+  const selected = scopeWindow || (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultSprint(windows);
   const isoDay = localDate;
+  analysis.view = { scope: scopeWindow ? o.scope : 'all', from: scopeWindow ? isoDay(scopeWindow.from) : analysis.scope.first, to: scopeWindow ? isoDay(scopeWindow.to - 1) : analysis.scope.last, current: !!(scopeWindow && scopeWindow.current), calendar: !!calendar };
   analysis.sprint = { calendar, windows: windows.map((w) => ({ from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
-  analysis.trend = comparePeriods(sessions, o.split ? { split: Date.parse(o.split) } : { window: selected });
+  analysis.trend = comparePeriods(allSessions, o.split ? { split: Date.parse(o.split) } : { window: selected });
   const config = readClaudeConfig();
   analysis.extensions = summarizeExtensions(sessions, analysis.inventory, config);
   analysis.recommendations = recommend(analysis, sessions, config).map((r) => {
     const m = analysis.trend && analysis.trend.metrics[REC_METRIC[r.id]];
     return m ? { ...r, trend: { metric: REC_METRIC[r.id], ...m } } : r;
   });
-  analysis.retro = buildRetro(analysis, sessions, latestRetro(), selected, calendar);
+  analysis.retro = buildRetro(analysis, allSessions, latestRetro(), selected, calendar);
   analysis.overview = overview(analysis, sessions);
   return { data, sessions, analysis };
 }
@@ -564,7 +579,7 @@ function retroText(r) {
   return L;
 }
 
-function retroMd(r) {
+export function retroMd(r) {
   if (!r) return [];
   const L = [`## Retro: ${retroPeriod(r)}`, '', r.headline, ''];
   for (const [key, title] of RETRO_COLUMNS) {

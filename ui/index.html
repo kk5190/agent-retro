@@ -53,27 +53,13 @@
   details.adv[open] .adv-panel { position: absolute; right: 0; top: calc(100% + 6px); width: 300px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 10px 30px rgb(0 0 0 / .12); display: grid; gap: 10px; }
   .adv-panel label { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 13px; color: var(--ink); }
   .adv-panel small { display: block; color: var(--ink-3); font-size: 12px; }
+  .status:empty { display: none; }
   .status { font-size: 12px; color: var(--ink-3); min-width: 80px; text-align: right; }
   .status.busy { color: var(--signal); }
   .status.err { color: var(--alert); }
 
   /* Layout ------------------------------------------------------------------ */
-  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px 64px; display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 40px; }
-  nav.rail { position: sticky; top: 76px; align-self: start; padding-top: 44px; }
-  nav.rail ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--rule); }
-  nav.rail a { display: block; padding: 5px 0 5px 14px; margin-left: -1px; border-left: 2px solid transparent; color: var(--ink-3); text-decoration: none; font-size: 13px; }
-  nav.rail a:hover { color: var(--ink); }
-  nav.rail a.on { color: var(--ink); border-left-color: var(--signal); font-weight: 500; }
-  @media (max-width: 1000px) {
-    .wrap { grid-template-columns: 1fr; gap: 0; padding: 0 16px 48px; }
-    .top { position: static; }
-    .top-in { padding: 10px 16px; }
-    html { scroll-padding-top: 12px; }
-    nav.rail { top: 0; position: relative; padding: 12px 0 0; overflow-x: auto; }
-    nav.rail ol { display: flex; border: 0; gap: 6px; }
-    nav.rail a { white-space: nowrap; border: 1px solid var(--rule); border-radius: 999px; padding: 4px 11px; margin: 0; }
-    nav.rail a.on { border-color: var(--signal); }
-  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 64px; }
   main { min-width: 0; }
 
   /* Intro + findings (the thesis) ------------------------------------------ */
@@ -278,13 +264,67 @@
   .vq q { display: block; color: var(--ink-2); margin-bottom: 6px; }
   .miss { display: inline-block; font-size: 11.5px; padding: 1px 8px; margin: 0 4px 4px 0; border-radius: 999px; background: var(--alert-soft); color: var(--alert); }
 
-  nav.rail li.grp { padding: 14px 0 4px 14px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
-  nav.rail li.grp:first-child { padding-top: 0; }
-  @media (max-width: 1000px) { nav.rail li.grp { display: none; } }
   .sprintbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; }
   .sprintbar > label { font-size: 12px; color: var(--ink-3); }
   .sprintbar input[type=date] { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 8px; }
   #sprintSettings[open] .adv-panel { left: 0; right: auto; }
+
+  /* App shell: tabs + time period ------------------------------------------- */
+  .top-in { gap: 10px 18px; }
+  .brand { margin-right: 0; }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; margin-right: auto; }
+  .tabs a { padding: 7px 11px; border-radius: 8px; color: var(--ink-3); text-decoration: none; font-size: 13.5px; white-space: nowrap; }
+  .tabs a:hover { color: var(--ink); background: var(--track); }
+  .tabs a[aria-current="page"] { color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 11px; font-size: 12.5px; color: var(--ink-2); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); font-weight: 600; }
+  @media (max-width: 1000px) { .tabs { order: 5; flex-basis: 100%; margin-right: 0; } }
+  .page[hidden] { display: none; }
+  .page > section:first-child { padding-top: 32px; }
+
+  /* Home ------------------------------------------------------------------- */
+  .home-head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; }
+  .home-head h1 { max-width: 26ch; margin: 2px 0 8px; }
+  .home-head p { margin: 0; color: var(--ink-2); }
+  .eyebrow { font: 500 11.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .share-link { font-size: 13px; text-decoration: none; padding: 7px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); color: var(--ink); white-space: nowrap; }
+  .share-link:hover { border-color: var(--signal); }
+  .areas { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 1100px) { .areas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .areas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .area { text-align: left; border: 1px solid var(--rule); background: var(--surface); border-radius: 12px; padding: 13px 14px; display: grid; gap: 8px; position: relative; overflow: hidden; cursor: pointer; font: inherit; color: inherit; }
+  .area::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c, var(--rule)); }
+  .area.good { --c: #2e8a63; } .area.watch { --c: #c79a1e; } .area.act { --c: var(--alert); }
+  @media (prefers-color-scheme: dark) { .area.good { --c: #6fd3a4; } }
+  .area:hover { border-color: var(--signal); }
+  .area[aria-expanded="true"] { border-color: var(--signal); box-shadow: inset 0 0 0 1px var(--signal); }
+  .area .k { font-size: 12.5px; color: var(--ink-3); display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .area .body { display: flex; align-items: center; gap: 12px; }
+  .area .v { display: block; font: 600 22px/1.1 var(--display); letter-spacing: -0.02em; }
+  .area .s { display: block; font-size: 12px; color: var(--ink-2); line-height: 1.35; }
+  .state { font: 600 10px var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: var(--track); color: var(--ink-2); }
+  .area.good .state { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
+  .area.watch .state { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+  .area.act .state { background: var(--alert-soft); color: var(--alert); }
+  .ringv { flex: none; }
+  .ringv circle.bg { stroke: var(--track); }
+  .ringv circle.fg { stroke: var(--c, var(--signal)); }
+  .peek { margin-top: 12px; }
+  .peek-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 12px; }
+  .peek-head h3 { margin: 0; }
+  .peek-head a { font-size: 13px; text-decoration: none; }
+  .kz-line { display: flex; gap: 10px; padding: 7px 0; border-top: 1px solid var(--rule); font-size: 13.5px; }
+  .kz-line:first-child { border-top: 0; }
+
+  /* Digest ------------------------------------------------------------------ */
+  .digest { max-width: 680px; }
+  .digest h2 { font: 700 clamp(26px, 3.4vw, 36px)/1.12 var(--display); letter-spacing: -0.02em; margin: 6px 0 12px; }
+  .digest h3 { font: 600 17px var(--display); margin: 26px 0 8px; }
+  .digest p, .digest li { color: var(--ink-2); }
+  .digest ul { padding-left: 20px; display: grid; gap: 6px; }
+  .digest li b { color: var(--ink); }
+  .digest .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
 
   /* Retro board ------------------------------------------------------------------ */
   .card { margin: 24px 0 18px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
@@ -329,82 +369,80 @@
 <body>
 <div class="top">
   <div class="top-in">
-    <div class="brand">agent-retro <span>· local report</span></div>
-    <form class="filters" id="filters" onsubmit="return false">
-      <label for="agentSel">Agents</label>
+    <div class="brand">agent-retro</div>
+    <nav class="tabs" aria-label="Pages">
+      <a href="#home" data-page="home">Home</a>
+      <a href="#retro" data-page="retro">Retro</a>
+      <a href="#work" data-page="work">Work</a>
+      <a href="#cost" data-page="cost">Cost</a>
+      <a href="#setup" data-page="setup">Setup</a>
+      <a href="#habits" data-page="habits">Habits</a>
+      <a href="#sessions" data-page="sessions">Sessions</a>
+    </nav>
+    <div class="seg" role="group" aria-label="Time period">
+      <button type="button" data-scope="sprint">This sprint</button>
+      <button type="button" data-scope="last">Last sprint</button>
+      <button type="button" data-scope="all">All time</button>
+    </div>
+    <div class="filters" id="filters">
+      <label for="agentSel" class="vh">Agents</label>
       <select id="agentSel"><option value="">Claude Code</option><option value="all">All agents</option></select>
-      <label for="project">Project</label>
+      <label for="project" class="vh">Project</label>
       <select id="project"><option value="">All projects</option></select>
-      <label for="days">Period</label>
-      <select id="days"><option value="">All time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
       <details class="adv">
-        <summary>More options</summary>
+        <summary>Settings</summary>
         <div class="adv-panel">
+          <form id="sprintForm" style="display:grid;gap:8px">
+            <b style="font-size:13px">Sprint calendar</b>
+            <label for="sprintStart" style="display:block">First day of any sprint<small>e.g. a Wednesday your sprint starts on</small></label>
+            <input type="date" id="sprintStart" required />
+            <label for="sprintDays" style="display:block">Length</label>
+            <select id="sprintDays"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary">Save</button><button type="button" id="sprintClear">Use rolling 14 days</button></div>
+            <span class="status" id="sprintStatus" style="text-align:left"></span>
+          </form>
+          <hr style="border:0;border-top:1px solid var(--rule);margin:4px 0">
           <label><input type="checkbox" id="transcripts" /><span>Include older transcripts<small>Also read ~/.claude/transcripts</small></span></label>
           <label><input type="checkbox" id="all" /><span>Include automated prompts<small>Prompts sent by scripts or the SDK, not typed by you</small></span></label>
+          <button type="button" id="refresh">Reload logs</button>
         </div>
       </details>
-      <button type="button" id="refresh">Reload logs</button>
-    </form>
+    </div>
     <span class="status" id="status" role="status" aria-live="polite"></span>
   </div>
 </div>
 
 <div id="tip" role="tooltip"></div>
 <div class="wrap">
-  <nav class="rail" aria-label="Sections">
-    <ol>
-      <li class="grp">This sprint</li>
-      <li><a href="#summary">Retro</a></li>
-      <li class="grp">All sessions</li>
-      <li><a href="#overview">Overview</a></li>
-      <li><a href="#changes">What to change</a></li>
-      <li><a href="#tasks">What you work on</a></li>
-      <li><a href="#tokens">Where tokens go</a></li>
-      <li><a href="#sessions">How sessions go</a></li>
-      <li><a href="#tools">What the agent does</a></li>
-      <li><a href="#extensions">Extensions</a></li>
-      <li><a href="#risk">Risk</a></li>
-      <li><a href="#rhythm">When you work</a></li>
-      <li><a href="#prompting">How you prompt</a></li>
-      <li><a href="#explore">Explore sessions</a></li>
-    </ol>
-  </nav>
-
   <main>
-    <section id="summary" class="intro">
-      <h1>Your agent retro</h1>
-      <p id="scope">Reading your local agent logs…</p>
-      <div class="sprintbar">
-        <label for="sprintSel">Sprint</label>
-        <select id="sprintSel"></select>
-        <details class="adv" id="sprintSettings">
-          <summary>Sprint settings</summary>
-          <form class="adv-panel" id="sprintForm">
-            <label for="sprintStart" style="display:block">First day of any sprint<small>e.g. a Wednesday your sprint starts on</small></label>
-            <input type="date" id="sprintStart" required />
-            <label for="sprintDays" style="display:block">Length</label>
-            <select id="sprintDays"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select>
-            <div style="display:flex;gap:8px;align-items:center"><button type="submit" class="primary">Save</button><button type="button" id="sprintClear">Use rolling 14 days</button></div>
-            <span class="status" id="sprintStatus" style="text-align:left"></span>
-          </form>
-        </details>
+  <div class="page" id="page-home" hidden>
+    <section id="home" class="intro">
+      <div class="home-head">
+        <div>
+          <p class="eyebrow" id="homeEyebrow"></p>
+          <h1 id="verdict">Reading your agent logs…</h1>
+          <p id="homeSub"></p>
+        </div>
+        <a class="share-link" href="#digest" id="shareBtn">Share this sprint ↗</a>
       </div>
+      <div class="areas" id="areas" role="list"></div>
+      <div class="peek panel" id="peek" aria-live="polite"></div>
+      <div class="grid g2 gap">
+        <div class="panel"><h3>Do next</h3><p class="hint">The changes with the most impact, from your own numbers. Each has a fix to paste.</p><ol class="actions" id="homeActions"></ol></div>
+        <div class="panel"><h3>Is it working?</h3><p class="hint">How the action items from your last saved retro moved.</p><div id="homeKaizen"></div></div>
+      </div>
+    </section>
+  </div>
+  <div class="page" id="page-retro" hidden>
+    <section id="retro-board" class="intro">
+      <h1>Sprint retro</h1>
+      <p id="scope">Reading your local agent logs…</p>
       <div class="card" id="sprintCard"></div>
       <div class="board" id="board"></div>
       <div class="grid g2 gap retro-foot">
         <div class="panel"><h3>Action items</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol></div>
         <div class="panel"><h3>Kaizen</h3><p class="hint">One small experiment, measured. Save the retro and the next one checks how its action items moved.</p><div id="kaizen"></div></div>
       </div>
-    </section>
-
-    <section id="overview" class="part">
-      <header>
-        <h2>All sessions</h2>
-        <p>The retro above covers one sprint. Everything from here down covers every session in view. Narrow it with Project and Period at the top.</p>
-      </header>
-      <div class="kpis" id="overviewKpis"></div>
-      <div class="panel"><h3>What you spend it on</h3><p class="hint">Share of all sessions by task.</p><div class="bars" id="overviewTasks"></div></div>
     </section>
 
     <section id="changes" class="part">
@@ -419,7 +457,8 @@
         <table id="trendTable"></table>
       </div>
     </section>
-
+  </div>
+  <div class="page" id="page-work" hidden>
     <section id="tasks" class="part">
       <header>
         <h2>What do you work on?</h2>
@@ -427,33 +466,6 @@
       </header>
       <div class="panel scroll"><table id="taskTable"></table>
         <p class="table-note">Tool errors: share of tool calls that failed. Corrections: share of your prompts that push back (“no”, “wait”, “actually”). Fix loops: test → edit → test cycles. Values of 10% or more are highlighted.</p>
-      </div>
-    </section>
-
-    <section id="tokens" class="part">
-      <header>
-        <h2>Where do the tokens go?</h2>
-        <p>The agent re-reads its whole context on every turn, so a bigger context costs more per turn and gets compacted sooner. The breakdown estimates what fills the context of the main conversation.</p>
-      </header>
-      <div class="kpis" id="tokKpis"></div>
-      <div class="grid g2">
-        <div class="panel">
-          <h3>What fills the context <span class="est">Estimate</span></h3>
-          <p class="hint">Tokens that entered the main conversation, by source. Subagents have their own context and are left out.</p>
-          <div class="bars" id="ctxSources"></div>
-        </div>
-        <div class="panel">
-          <h3>Tool results, by tool <span class="est">Estimate</span></h3>
-          <p class="hint">Which tools put the most text or images back into the conversation.</p>
-          <div class="bars" id="ctxTools"></div>
-        </div>
-      </div>
-      <div class="panel gap">
-        <h3>Tokens per day</h3>
-        <p class="hint">All tokens the agent processed each day, with the 7-day average. Hover or use the arrow keys to read a day.</p>
-        <div class="lkeys"><span><i class="colkey"></i>Each day</span><span><i></i>7-day average</span></div>
-        <div class="chart" id="tokTrend"></div>
-        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="tokTable"></table></div></details>
       </div>
     </section>
 
@@ -495,6 +507,53 @@
       <div class="panel gap"><h3>Command sequences you repeat</h3><p class="hint">Runs of 3–5 shell commands that recur across sessions: candidates for a script or a saved command.</p><div id="workflows"></div></div>
     </section>
 
+    <details class="more">
+      <summary>More detail <span>agents, models, projects, typed commands</span></summary>
+      <div class="grid g2">
+        <div class="panel scroll"><h3>Agents compared</h3><p class="hint">When more than one agent is included.</p><table id="agentTable"></table></div>
+        <div class="panel"><h3>Models</h3><p class="hint">Agent replies per model.</p><div class="bars" id="models"></div></div>
+        <div class="panel"><h3>Projects</h3><p class="hint">Your prompts per project.</p><div class="bars" id="projects"></div></div>
+        <div class="panel"><h3>Slash commands you type</h3><p class="hint">From your CLI history.</p><div class="bars" id="cmds"></div></div>
+      </div>
+    </details>
+  </div>
+  <div class="page" id="page-cost" hidden>
+    <section id="tokens" class="part">
+      <header>
+        <h2>Where do the tokens go?</h2>
+        <p>The agent re-reads its whole context on every turn, so a bigger context costs more per turn and gets compacted sooner. The breakdown estimates what fills the context of the main conversation.</p>
+      </header>
+      <div class="kpis" id="tokKpis"></div>
+      <div class="grid g2">
+        <div class="panel">
+          <h3>What fills the context <span class="est">Estimate</span></h3>
+          <p class="hint">Tokens that entered the main conversation, by source. Subagents have their own context and are left out.</p>
+          <div class="bars" id="ctxSources"></div>
+        </div>
+        <div class="panel">
+          <h3>Tool results, by tool <span class="est">Estimate</span></h3>
+          <p class="hint">Which tools put the most text or images back into the conversation.</p>
+          <div class="bars" id="ctxTools"></div>
+        </div>
+      </div>
+      <div class="panel gap">
+        <h3>Tokens per day</h3>
+        <p class="hint">All tokens the agent processed each day, with the 7-day average. Hover or use the arrow keys to read a day.</p>
+        <div class="lkeys"><span><i class="colkey"></i>Each day</span><span><i></i>7-day average</span></div>
+        <div class="chart" id="tokTrend"></div>
+        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="tokTable"></table></div></details>
+      </div>
+    </section>
+  </div>
+  <div class="page" id="page-setup" hidden>
+    <section id="risk" class="part">
+      <header>
+        <h2>Anything risky?</h2>
+        <p>Operations worth a second look, counted from the commands and file paths the agent used. Search the session list below to find where they happened.</p>
+      </header>
+      <div class="kpis" id="riskKpis"></div>
+    </section>
+
     <section id="extensions" class="part">
       <header>
         <h2>Which extensions earn their place?</h2>
@@ -510,15 +569,8 @@
       </div>
       <div class="panel scroll gap"><h3>Slash commands</h3><p class="hint">Commands you typed, including plugin commands.</p><div id="extCmds"></div></div>
     </section>
-
-    <section id="risk" class="part">
-      <header>
-        <h2>Anything risky?</h2>
-        <p>Operations worth a second look, counted from the commands and file paths the agent used. Search the session list below to find where they happened.</p>
-      </header>
-      <div class="kpis" id="riskKpis"></div>
-    </section>
-
+  </div>
+  <div class="page" id="page-habits" hidden>
     <section id="rhythm" class="part">
       <header>
         <h2>When do you work?</h2>
@@ -560,7 +612,8 @@
         <div class="panel"><h3>Prompts you repeat</h3><p class="hint">Short prompts sent more than once.</p><div class="chips" id="repeated"></div></div>
       </div>
     </section>
-
+  </div>
+  <div class="page" id="page-sessions" hidden>
     <section id="explore" class="part">
       <header>
         <h2>Explore sessions</h2>
@@ -579,17 +632,13 @@
         <div class="panel detail" id="sessDetail" aria-live="polite"><p class="empty">Select a session to see its details.</p></div>
       </div>
     </section>
-
-    <details class="more">
-      <summary>More detail <span>agents, models, projects, typed commands</span></summary>
-      <div class="grid g2">
-        <div class="panel scroll"><h3>Agents compared</h3><p class="hint">When more than one agent is included.</p><table id="agentTable"></table></div>
-        <div class="panel"><h3>Models</h3><p class="hint">Agent replies per model.</p><div class="bars" id="models"></div></div>
-        <div class="panel"><h3>Projects</h3><p class="hint">Your prompts per project.</p><div class="bars" id="projects"></div></div>
-        <div class="panel"><h3>Slash commands you type</h3><p class="hint">From your CLI history.</p><div class="bars" id="cmds"></div></div>
-      </div>
-    </details>
-
+  </div>
+  <div class="page" id="page-digest" hidden>
+    <section id="digest-page" class="intro">
+      <p style="margin:0 0 18px"><a href="#home">← Back to Home</a></p>
+      <article class="digest" id="digest"></article>
+    </section>
+  </div>
     <footer id="foot"></footer>
   </main>
 </div>
@@ -759,27 +808,8 @@ function dailyTable(id, series, valueOf, fmtV) {
 /* ---- summary ---- */
 /* ---- sprint picker + settings ---- */
 function renderSprint(a) {
-  const sp = a.sprint || { windows: [] };
-  const label = (w) => `${dateStr(w.from)} – ${dateStr(w.to)}${w.current ? ' (in progress)' : ''} · ${w.sessions} session${w.sessions === 1 ? '' : 's'}`;
-  // hide empty sprints older than your first one with sessions
-  const lastWithData = sp.windows.reduce((i, w, k) => (w.sessions ? k : i), 0);
-  const shown = sp.windows.filter((w, k) => w.current || k <= lastWithData || w.from === sp.selected);
-  $('sprintSel').innerHTML = shown.length ? shown.map((w) => `<option value="${esc(w.from)}"${w.from === sp.selected ? ' selected' : ''}>${esc(sp.calendar ? label(w) : 'Last 14 days of activity')}</option>`).join('') : '<option>No sessions</option>';
-  $('sprintSel').disabled = !sp.calendar;
+  const sp = a.sprint || {};
   if (sp.calendar) { $('sprintStart').value = sp.calendar.start; $('sprintDays').value = String(sp.calendar.days); }
-}
-
-function renderOverview(a, sessions) {
-  const ov = a.overview;
-  if (!ov) return;
-  kpis('overviewKpis', [
-    ['sessions', fmt(ov.sessions), `${dateStr(ov.first)} – ${dateStr(ov.last)}`],
-    ['active days', fmt(ov.activeDays), `${fmt(ov.prompts)} of your prompts`],
-    ['recorded spend', ov.spend ? '$' + ov.spend.toLocaleString() : '—', `${fmtN(ov.tokens)} tokens`],
-    ['agent working time', `${ov.agentHours} h`, 'gaps under 30 min between actions'],
-    ['changes suggested', fmt(ov.recommendations), 'see What to change'],
-  ]);
-  bars('overviewTasks', Object.entries(a.tasks || {}).map(([, t]) => [t.label, t.sessions]), { total: ov.sessions });
 }
 
 function renderSummary(a, sessions) {
@@ -858,7 +888,7 @@ function renderTasks(a) {
       <td style="font-family:var(--body)">${(a.recommendations || []).some((r) => r.task === id) ? `<a href="#rec-playbook-${esc(id)}" data-rec>How to do this better →</a>` : ''}</td></tr>`).join('');
   $('taskTable').querySelectorAll('a[data-rec]').forEach((l) => l.addEventListener('click', (e) => e.stopPropagation()));
   $('taskTable').querySelectorAll('tr.pick').forEach((tr) => {
-    const go = () => { $('taskFilter').value = tr.dataset.task; $('sessSearch').value = ''; renderExplorer(); location.hash = 'explore'; };
+    const go = () => { $('taskFilter').value = tr.dataset.task; $('sessSearch').value = ''; renderExplorer(); location.hash = 'sessions'; };
     tr.addEventListener('click', go);
     tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
   });
@@ -1250,21 +1280,120 @@ function renderDetail(s) {
 let keepSession = null;
 
 /* ---- section rail ---- */
-function watchSections() {
-  const links = [...document.querySelectorAll('nav.rail a')];
-  const sections = links.map((l) => $(l.getAttribute('href').slice(1))).filter(Boolean);
-  let queued = false;
-  const update = () => {
-    queued = false;
-    const line = innerHeight * 0.35;
-    let current = sections[0];
-    for (const sec of sections) if (sec.getBoundingClientRect().top <= line) current = sec;
-    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
-    links.forEach((l) => l.classList.toggle('on', l.getAttribute('href') === '#' + current.id));
-  };
-  addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(update); } }, { passive: true });
-  addEventListener('resize', update);
-  update();
+/* ---- pages: #home, #cost, … or any element id, which opens the page that holds it ---- */
+const PAGES = ['home', 'retro', 'work', 'cost', 'setup', 'habits', 'sessions', 'digest'];
+function route() {
+  const id = decodeURIComponent(location.hash.slice(1)) || 'home';
+  const el = !PAGES.includes(id) && document.getElementById(id);
+  const page = PAGES.includes(id) ? id : el && el.closest('.page') ? el.closest('.page').id.replace('page-', '') : 'home';
+  document.querySelectorAll('.page').forEach((p) => { p.hidden = p.id !== 'page-' + page; });
+  document.querySelectorAll('.tabs a').forEach((t) => { if (t.dataset.page === page) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
+  charts.forEach((draw) => draw()); // charts measure their container; hidden pages have none
+  hideTip();
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' }); else scrollTo({ top: 0, behavior: 'instant' });
+}
+addEventListener('hashchange', route);
+
+/* ---- time period: this sprint / last sprint / all time ---- */
+let SCOPE = 'sprint';
+try { SCOPE = localStorage.getItem('agent-retro:scope') || 'sprint'; } catch { /* private window */ }
+function setScope(sc) {
+  SCOPE = sc;
+  try { localStorage.setItem('agent-retro:scope', sc); } catch { /* ignore */ }
+  document.querySelectorAll('[data-scope]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.scope === sc)));
+}
+
+/* ---- Home: verdict, five areas with a peek, what to do next, is it working ---- */
+function ringSvg(frac) {
+  const r = 20, C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac));
+  return `<svg class="ringv" width="52" height="52" viewBox="0 0 52 52" aria-hidden="true"><circle class="bg" cx="26" cy="26" r="${r}" fill="none" stroke-width="6"/><circle class="fg" cx="26" cy="26" r="${r}" fill="none" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(f * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 26 26)"/></svg>`;
+}
+const STATE_LABEL = { good: 'good', watch: 'watch', act: 'act', none: '—' };
+function areasOf(a) {
+  const t = (a.trend && a.trend.metrics) || {};
+  const tv = (k) => (t[k] ? (t[k].verdict === 'better' ? 'good' : t[k].verdict === 'worse' ? 'act' : 'watch') : 'none');
+  const sessions = a.sessions.count || 0;
+  const cx = a.context || {};
+  const under = cx.turns ? 1 - cx.highTurns / cx.turns : null;
+  const fails = a.volume.toolCalls ? (a.toolErrors || {}).total / a.volume.toolCalls : null;
+  const ctxPrac = ((a.prompting || {}).practices || []).find((p) => p.id === 'context');
+  const E = a.extensions || { plugins: [] };
+  const plugins = E.plugins.filter((p) => p.verdict !== 'disabled' && p.verdict !== 'no activity');
+  const usedPlugins = plugins.filter((p) => p.verdict === 'used' || p.verdict === 'rarely used').length;
+  const perSession = sessions && a.cost.usd ? a.cost.usd / sessions : null;
+  return [
+    { id: 'cost', name: 'Cost', page: 'cost', state: tv('costPerSession'), frac: null, v: perSession != null ? money(perSession) : '—', s: perSession != null ? 'recorded spend per session' : 'no cost recorded' },
+    { id: 'context', name: 'Context', page: 'cost', state: under == null ? 'none' : under < 0.5 ? 'act' : under < 0.75 ? 'watch' : 'good', frac: under, v: under == null ? '—' : rate(under), s: 'of turns under 150k tokens' },
+    { id: 'reliability', name: 'Reliability', page: 'work', state: fails == null ? 'none' : fails > 0.1 ? 'act' : fails > 0.05 ? 'watch' : 'good', frac: fails == null ? null : 1 - fails, v: fails == null ? '—' : rate(1 - fails), s: 'of tool calls succeed' },
+    { id: 'prompting', name: 'Prompting', page: 'habits', state: !ctxPrac || !ctxPrac.sessions ? 'none' : ctxPrac.share < 0.25 ? 'act' : ctxPrac.share < 0.5 ? 'watch' : 'good', frac: ctxPrac && ctxPrac.sessions ? ctxPrac.share : null, v: ctxPrac && ctxPrac.sessions ? rate(ctxPrac.share) : '—', s: 'of openings give context' },
+    { id: 'setup', name: 'Setup', page: 'setup', state: !plugins.length ? 'none' : plugins.length - usedPlugins >= 2 ? 'act' : plugins.length - usedPlugins === 1 ? 'watch' : 'good', frac: plugins.length ? usedPlugins / plugins.length : null, v: plugins.length ? `${usedPlugins} of ${plugins.length}` : '—', s: 'plugins in use' },
+  ];
+}
+let PEEK = null;
+function renderPeek(a) {
+  const areas = areasOf(a);
+  const ar = areas.find((x) => x.id === PEEK) || areas[0];
+  document.querySelectorAll('.area').forEach((b) => b.setAttribute('aria-expanded', String(b.dataset.area === ar.id)));
+  const TITLE = { cost: 'Tokens per day', context: 'What fills the context', reliability: 'Why tool calls fail', prompting: 'Practices in your opening prompts', setup: 'Extensions you never use' };
+  $('peek').innerHTML = `<div class="peek-head"><h3>${esc(ar.name)}: ${esc(TITLE[ar.id])}</h3><a href="#${ar.page}">Open the ${esc(ar.page)} page →</a></div>${ar.id === 'cost' ? '<div class="chart" id="peekChart"></div>' : '<div class="bars" id="peekBars"></div>'}`;
+  const cb = a.contextBreakdown || {};
+  if (ar.id === 'cost') lineChart('peekChart', (a.tokens && a.tokens.daily) || [], (d) => d.n, fmtN, 'Tokens');
+  else if (ar.id === 'context') bars('peekBars', topN(cb.sources, 5), { total: sum(cb.sources), label: ctxLabel, value: fmtN });
+  else if (ar.id === 'reliability') bars('peekBars', topN((a.toolErrors || {}).byClass, 5), { total: (a.toolErrors || {}).total, label: (k) => ERR_LABEL[k] || k });
+  else if (ar.id === 'prompting') bars('peekBars', ((a.prompting || {}).practices || []).filter((p) => p.sessions).map((p) => [p.label, Math.round(p.share * 100)]), { value: (v) => v + '%' });
+  else {
+    const E = a.extensions || {}; const n = (list) => (list || []).filter((x) => x.verdict === 'unused').length;
+    bars('peekBars', [['Plugins never used', n(E.plugins)], ['Skills never used', n(E.skills)], ['MCP servers never called', n(E.mcpServers)]].filter(([, v]) => v), {});
+  }
+}
+function renderHome(a) {
+  const r = a.retro, v = a.view || { scope: 'all' };
+  const all = v.scope === 'all';
+  const c = r ? r.card : null;
+  $('homeEyebrow').textContent = all ? `All time · ${dateStr(v.from)} – ${dateStr(v.to)}` : `${v.scope === 'last' ? 'Last sprint' : 'This sprint'} · ${dateStr(v.from)} – ${dateStr(v.to)}${v.current ? ' · in progress' : ''}`;
+  $('verdict').textContent = all ? 'Everything you have done with your agents' : r ? r.verdict : 'No sessions yet';
+  const t = (a.trend && a.trend.metrics) || {};
+  const better = Object.values(t).filter((m) => m.verdict === 'better').length, worse = Object.values(t).filter((m) => m.verdict === 'worse').length;
+  const hours = ((a.time || {}).agentMinutes || 0) / 60;
+  $('homeSub').textContent = `${fmt(a.sessions.count)} sessions · ${a.cost.usd ? '$' + Math.round(a.cost.usd).toLocaleString() : 'no recorded spend'} · ${hours.toFixed(1)} h of agent work` + (!all && a.trend ? ` · ${better} metric${better === 1 ? '' : 's'} better and ${worse} worse than the sprint before` : '');
+  $('shareBtn').hidden = all;
+  const areas = areasOf(a);
+  if (!PEEK || !areas.some((x) => x.id === PEEK)) PEEK = (areas.find((x) => x.state === 'act') || areas[0]).id;
+  $('areas').innerHTML = areas.map((ar) => `<button type="button" role="listitem" class="area ${ar.state}" data-area="${ar.id}" aria-expanded="false">
+      <span class="k">${esc(ar.name)}<span class="state">${STATE_LABEL[ar.state]}</span></span>
+      <span class="body">${ar.frac != null ? ringSvg(ar.frac) : ''}<span><span class="v">${esc(ar.v)}</span><span class="s">${esc(ar.s)}</span></span></span></button>`).join('');
+  $('areas').querySelectorAll('.area').forEach((b) => b.addEventListener('click', () => { PEEK = b.dataset.area; renderPeek(a); }));
+  renderPeek(a);
+  const recs = (a.recommendations || []).slice(0, 3);
+  $('homeActions').innerHTML = recs.length ? recs.map((x, i) => `<li><b>${esc(x.title)}</b>${x.fix ? `<button type="button" data-hfix="${i}">Copy fix</button>` : `<a href="#rec-${esc(x.id)}" style="font-size:12.5px">How</a>`}<small>${esc(firstSentence(x.evidence || x.action))}</small></li>`).join('') : '<p class="empty">Nothing crossed a threshold. Keep going.</p>';
+  $('homeActions').querySelectorAll('[data-hfix]').forEach((b) => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(recs[Number(b.dataset.hfix)].fix.content); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
+    setTimeout(() => { b.textContent = 'Copy fix'; }, 1600);
+  }));
+  const k = r ? r.kaizen : null;
+  const mark = { better: '✅', worse: '❌', flat: '➖', unmeasured: '·' };
+  $('homeKaizen').innerHTML = k && k.review ? k.review.items.map((it) => `<div class="kz-line"><span>${mark[it.verdict] || '·'}</span><div><b>${esc(it.title)}</b><br><span style="color:var(--ink-3);font-size:12.5px">${it.metric ? `${esc(it.metric)}: ${esc(it.baseline)} → ${esc(it.now)}` : 'not measured'}</span></div></div>`).join('') + '<p style="margin:10px 0 0"><a href="#retro-board">Full retro →</a></p>'
+    : `<p class="empty">No saved retro yet. Open the <a href="#retro-board">retro</a> and choose “Save this retro”; next sprint this box shows what changed.</p>${k && k.experiment ? `<p style="font-size:13.5px;margin:10px 0 0">Experiment to try: <b>${esc(k.experiment.title)}</b> (${esc(k.experiment.metric.label)}, now ${esc(k.experiment.metric.display)}).</p>` : ''}`;
+}
+const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
+
+/* ---- Digest: the retro as a short report to share ---- */
+function renderDigest(a) {
+  const r = a.retro;
+  if (!r) { $('digest').innerHTML = '<p class="empty">No sprint to report yet.</p>'; return; }
+  const li = (list) => (list.length ? `<ul>${list.map((it) => `<li><b>${esc(it.text)}</b>${it.detail ? ` ${esc(it.detail)}` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing this sprint.</p>');
+  const k = r.kaizen;
+  $('digest').innerHTML = `<p class="eyebrow">Sprint of ${esc(dateStr(r.period.from))} – ${esc(dateStr(r.period.to))} · ${r.card.sessions} sessions${r.card.spend ? ' · $' + Math.round(r.card.spend) : ''} · ${r.card.agentHours} h</p>
+    <h2>${esc(r.verdict)}</h2><p>${esc(r.headline)}</p>
+    <h3>What went well</h3>${li(r.wentWell)}
+    <h3>What didn't</h3>${li(r.didntGoWell)}
+    <h3>Try next sprint</h3>${r.actions.length ? `<ol>${r.actions.map((x) => `<li><b>${esc(x.title)}</b>${x.metric ? ` Watch ${esc(x.metric.label)} (now ${esc(x.metric.display)}).` : ''}</li>`).join('')}</ol>` : '<p class="empty">No action items.</p>'}
+    ${k.review ? `<h3>Last sprint's experiments</h3><ul>${k.review.items.map((it) => `<li><b>${esc(it.title)}</b>${it.metric ? `: ${esc(it.metric)} ${esc(it.baseline)} → ${esc(it.now)} (${esc(it.verdict)})` : ''}</li>`).join('')}</ul>` : ''}
+    <div class="tools"><button type="button" class="primary" id="copyMd">Copy as markdown</button><span class="status" id="copyStatus" style="text-align:left">Paste it into your team channel.</span></div>`;
+  $('copyMd').addEventListener('click', async () => {
+    try { const md = await fetch('/api/retro.md?' + query()).then((x) => x.text()); await navigator.clipboard.writeText(md); $('copyStatus').textContent = 'Copied.'; }
+    catch { $('copyStatus').textContent = 'Could not copy; run agent-retro --retro --md instead.'; }
+  });
 }
 
 /* ---- data ---- */
@@ -1273,8 +1402,7 @@ function query() {
   const ag = $('agentSel').value;
   if (ag === 'all') q.set('agents', '1'); else if (ag) q.set('agent', ag);
   if ($('project').value) q.set('project', $('project').value);
-  if (!$('sprintSel').disabled && $('sprintSel').value) q.set('sprint', $('sprintSel').value);
-  if ($('days').value) q.set('days', $('days').value);
+  if (SCOPE !== 'all') q.set('scope', SCOPE);
   if ($('transcripts').checked) q.set('transcripts', '1');
   if ($('all').checked) q.set('all', '1');
   return q.toString();
@@ -1290,20 +1418,22 @@ async function getJson(url) {
   if (!r.ok || j.error) throw new Error(j.error || `${url} returned ${r.status}`);
   return j;
 }
+let loaded = false;
 async function load() {
   const st = $('status'); st.className = 'status busy'; st.textContent = 'Reading logs…';
   try {
-    const t0 = performance.now(); const q = query();
+    const q = query();
     const [a, ss] = await Promise.all([getJson('/api/data?' + q), getJson('/api/sessions?' + q)]);
     SESSIONS = ss.sessions || [];
-    renderSprint(a); renderSummary(a, SESSIONS); renderOverview(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
+    renderSprint(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
     renderRisk(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
-    dispatchEvent(new Event('scroll'));
     $('foot').textContent = `Generated ${new Date(a.generatedAt).toLocaleString()} from local logs. Nothing leaves this machine.`;
-    st.className = 'status'; st.textContent = `Updated in ${Math.round(performance.now() - t0)} ms`;
+    st.className = 'status'; st.textContent = '';
+    if (!loaded) { loaded = true; if (location.hash.length > 1) route(); } // a link to a section can only scroll once it has content
   } catch (e) {
     st.className = 'status err'; st.textContent = 'Could not read logs';
-    $('scope').textContent = `Could not load your logs: ${e.message}. Check that the agent-retro server is still running, then choose Reload logs.`;
+    $('verdict').textContent = 'Could not load your logs';
+    $('homeSub').textContent = `${e.message}. Check that the agent-retro server is still running, then choose Reload logs in Settings.`;
   }
 }
 async function init() {
@@ -1316,16 +1446,17 @@ async function init() {
     $('transcripts').closest('label').style.display = m.transcripts ? '' : 'none';
     // start from the options the dashboard was launched with (--all-agents, --agent, --days, …)
     const d = m.defaults || {};
-    $('agentSel').value = d.agents || ''; if ([...$('days').options].some((x) => x.value === d.days)) $('days').value = d.days;
+    $('agentSel').value = d.agents || '';
     $('transcripts').checked = !!d.transcripts; $('all').checked = !!d.all;
   } catch { /* load() reports the error */ }
-  ['agentSel', 'project', 'days', 'transcripts', 'all'].forEach((id) => $(id).addEventListener('change', load));
+  ['agentSel', 'project', 'transcripts', 'all'].forEach((id) => $(id).addEventListener('change', load));
+  setScope(SCOPE);
+  document.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => { setScope(b.dataset.scope); load(); }));
   $('refresh').addEventListener('click', async () => { try { await postJson('/api/reload', {}); } catch { /* load() reports it */ } load(); });
   ['taskFilter', 'sessSort'].forEach((id) => $(id).addEventListener('change', renderExplorer));
-  $('sprintSel').addEventListener('change', load);
   $('sprintForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    try { await postJson('/api/config/sprint', { sprint: { start: $('sprintStart').value, days: Number($('sprintDays').value) } }); $('sprintSel').disabled = true; $('sprintStatus').textContent = 'Saved.'; $('sprintSettings').open = false; load(); }
+    try { await postJson('/api/config/sprint', { sprint: { start: $('sprintStart').value, days: Number($('sprintDays').value) } }); $('sprintStatus').textContent = 'Saved.'; load(); }
     catch (err) { $('sprintStatus').textContent = err.message; }
   });
   $('sprintClear').addEventListener('click', async () => {
@@ -1333,7 +1464,7 @@ async function init() {
     catch (err) { $('sprintStatus').textContent = err.message; }
   });
   let timer; $('sessSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderExplorer, 120); });
-  watchSections();
+  route();
   load();
 }
 init();

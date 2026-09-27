@@ -516,6 +516,15 @@ test('cli: --demo runs on synthetic data and never reads the real home', () => {
   assert.match(r.stderr, /demo mode: 36 synthetic sessions/);
 });
 
+test('cli: --scope sprint keeps each in-sprint session whole, spend included', () => {
+  const run = (...args) => JSON.parse(spawnSync(process.execPath, [CLI, '--demo', '--json', ...args], { env: { ...process.env, AGENT_RETRO_HOME: '/nonexistent-home' }, encoding: 'utf8' }).stdout);
+  const sprint = run('--scope', 'sprint');
+  assert.equal(sprint.view.scope, 'sprint');
+  assert.ok(sprint.sessions.count > 0 && sprint.sessions.count < 36);
+  assert.ok(sprint.cost.usd > 0, 'cost records carry no timestamp but belong to their session');
+  assert.ok(sprint.cost.usd < run().cost.usd);
+});
+
 test('retro: columns, caps, action metrics and the Kaizen review of a saved retro', async () => {
   const { buildRetro, retroSnapshot } = await import('./retro.mjs');
   const { buildSessions } = await import('./sessions.mjs');

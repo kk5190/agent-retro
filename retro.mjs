@@ -13,6 +13,11 @@ import { REC_METRIC, PLAYBOOKS } from './recommend.mjs';
 export const SPRINT_DAYS = 14;
 const MAX = 4;
 
+/** Short phrases for the one-line verdict: what went better, and what hurt. */
+const WIN = { costPerSession: 'A cheaper sprint', tokensPerSession: 'Leaner sessions', toolErrorRate: 'Fewer tool failures', highContextShare: 'Lighter context', browserOutputShare: 'Fewer screenshots', ackRate: 'Fewer check-ins', correctionRate: 'Fewer corrections', listingTokensPerSession: 'A leaner setup', sensitivePerSession: 'Safer tool use' };
+const DRAG = { costPerSession: 'spend per session went up', tokensPerSession: 'sessions got heavier', toolErrorRate: 'more tool calls failed', highContextShare: 'your context ran hot', browserOutputShare: 'screenshots crowded the context', ackRate: 'more “continue?” check-ins', correctionRate: 'more corrections', listingTokensPerSession: 'your setup got heavier', sensitivePerSession: 'more secret-file access',
+  'context-source': 'tool output crowds your context', 'context-pressure': 'your context ran hot', corrections: 'you corrected the agent often', 'error-bursts': 'tools failed in bursts', risk: 'a few risky operations' };
+
 /** Recommendations that add a habit go under Start; ones that remove something under Stop. */
 const STOP = new Set(['unused-plugins', 'unused-skills', 'unused-mcp', 'check-ins', 'heavy-hooks', 'heavy-skills']);
 
@@ -102,13 +107,19 @@ export function buildRetro(analysis, sessions, previous = null, window = null, c
   };
 
   const win = wentWell[0], drag = didntGoWell[0];
+  const better = trend.find(([k, m]) => m.verdict === 'better' && WIN[k]);
+  const hurt = (a.findings || []).find((f) => f.level === 'attention' && DRAG[f.id]) || null;
+  const worse = trend.find(([k, m]) => m.verdict === 'worse' && DRAG[k]);
+  const good = better ? WIN[better[0]] : null;
+  const bad = hurt ? DRAG[hurt.id] : worse ? DRAG[worse[0]] : null;
+  const verdict = !list.length ? 'No sessions in this sprint yet' : good && bad ? `${good}, but ${bad}` : good || (bad ? bad.charAt(0).toUpperCase() + bad.slice(1) : 'A steady sprint');
   const headline = !list.length ? 'No sessions in this period yet.'
     : `${list.length} session${list.length === 1 ? '' : 's'}${card.spend ? `, $${card.spend.toFixed(0)}` : ''} and ${card.agentHours.toFixed(0)} h of agent work, mostly ${/^[A-Z][a-z]/.test(taskLabel) ? taskLabel.charAt(0).toLowerCase() + taskLabel.slice(1) : taskLabel}.`
       + (win ? ` Biggest win: ${win.text.charAt(0).toLowerCase() + win.text.slice(1)}.` : '') + (drag ? ` Biggest drag: ${drag.text.charAt(0).toLowerCase() + drag.text.slice(1).replace(/\.$/, '')}.` : '');
 
   return {
     period: { from: iso(from), to: iso(to ? to - 1 : null), days: from ? Math.round((to - from) / 864e5) : null, current: !!(window && window.current), calendar: !!calendar },
-    card, headline,
+    card, headline, verdict,
     wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), start: start.slice(0, MAX), stop: stop.slice(0, MAX),
     actions, kaizen,
   };

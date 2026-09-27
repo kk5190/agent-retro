@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { loadTelemetry, loadHistory, writeLabel, saveRetro, writeSprintConfig, CONTEXT_LABELS } from './agent-retro.mjs';
+import { loadTelemetry, loadHistory, writeLabel, saveRetro, writeSprintConfig, retroMd, CONTEXT_LABELS } from './agent-retro.mjs';
 import { TASKS } from './sessions.mjs';
 import { PARSABLE } from './agents.mjs';
 import { sessionView } from './telemetry.mjs';
@@ -37,6 +37,7 @@ function queryOpts(q) {
     includeTranscripts: q.transcripts === '1' || (!has('transcripts') && !!launch.includeTranscripts), history: q.history !== '0' && launch.history !== false,
     allSources: q.all === '1' || (!has('all') && !!launch.allSources), errors: false, format: 'json',
     allAgents: q.agents === '1', agent: q.agent || null,
+    scope: ['sprint', 'last'].includes(q.scope) ? q.scope : null,
     sprintPick: q.sprint || null, sprintStart: launch.sprintStart || null, sprintDays: launch.sprintDays || null,
   };
 }
@@ -135,6 +136,11 @@ export function startUi(o = {}) {
           return sendJson(res, 200, { ok: true });
         }
         if (url.pathname === '/api/data') return sendJson(res, 200, (await build(q)).analysis);
+        if (url.pathname === '/api/retro.md') {
+          const md = retroMd((await build(q)).analysis.retro).join('\n') + '\n';
+          res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'no-store' });
+          return res.end(md);
+        }
         if (url.pathname === '/api/sessions') {
           const { sessions } = await build(q);
           const list = q.task ? sessions.filter((s) => s.task.primary === q.task) : sessions;

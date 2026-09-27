@@ -37,7 +37,11 @@
 - **Before/after trends:** the last 14 days against the 14 before, or around a date with
   `--split <date>`.
 - **Local dashboard, reports and exports:**
-  - a dashboard with findings, charts, sortable tables and a session explorer
+  - a dashboard with a Home page (verdict, five areas with a status and a peek, what to do next,
+    whether last sprint's changes worked), focused pages for the retro, work, cost, setup, habits
+    and sessions, one time-period switch (this sprint, last sprint, all time), and a shareable
+    sprint digest
+  - `--scope sprint|last|all` to limit the whole analysis to one sprint
   - terminal and markdown reports
   - a redacted, versioned export (`--export`, `--sessions`, `--text none|excerpts|full`)
   - an MCP server (`--mcp`)
