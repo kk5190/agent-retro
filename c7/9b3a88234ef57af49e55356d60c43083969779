@@ -1,0 +1,48 @@
+CHANGELOG.md
+  s_135e7898200b4f::t_aa35772bc37744 29,35-37
+sessions.mjs
+  s_135e7898200b4f::t_8fb2925174a41e 770,774-788
+  s_135e7898200b4f::t_e35af363868752 64-65,72,171-172,184,195,225-246,310,319,325,353,379,548-549
+  s_135e7898200b4f::t_01200ee8c67f8e 403
+  s_135e7898200b4f::t_a7cc74b80ca2c9 789-790
+fixtures.mjs
+  s_135e7898200b4f::t_bd49b0a93b7a53 54,57-59,118
+  s_135e7898200b4f::t_04fcd2edccf832 183,213-220
+agent-retro.mjs
+  s_135e7898200b4f::t_3df06333b84b53 648-657
+README.md
+  s_135e7898200b4f::t_aa35772bc37744 178-180,182-187,217-218,304-305
+recommend.mjs
+  s_135e7898200b4f::t_2d4ac10e3e0f98 44,171-196,404
+tests.mjs
+  s_135e7898200b4f::t_00a6977650f25a 664-667
+  s_135e7898200b4f::t_e9c259d6264b23 626-663,668-674
+agents.mjs
+  s_135e7898200b4f::t_01200ee8c67f8e 558,586-587,619,644-647
+ui/index.html
+  s_135e7898200b4f::t_299f4e1d0192d7 86
+  s_135e7898200b4f::t_3a04d2f01875ab 507-510,953-967,992,1461
+mcp.mjs
+  s_135e7898200b4f::t_fcfd4c2dd9f7b0 28
+retro.mjs
+  s_135e7898200b4f::t_2d4ac10e3e0f98 16-17
+schema/telemetry.schema.json
+  s_135e7898200b4f::t_7a035a47a11ca3 923-933,935-937,939-941,943-945,947-954
+  s_135e7898200b4f::t_c4d429300baeaf 934,938,942,946
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c79b3a88234ef57af49e55356d60c43083969779",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
