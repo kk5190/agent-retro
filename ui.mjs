@@ -6,7 +6,8 @@
  * http://127.0.0.1:<port>/ and JSON at /api/data (rollup), /api/sessions (session
  * records, `?task=` to filter) and /api/meta. POST /api/reload drops cached results; POST
  * /api/label { sessionId, task } corrects a session's task label; POST /api/retro/save saves the
- * current retro for the next one to review (both same-origin JSON only).
+ * current retro for the next one to review; POST /api/config/sprint { sprint: { start, days } | null }
+ * sets the sprint calendar (all same-origin JSON only).
  *
  * No external assets, no network access beyond localhost.
  */
@@ -15,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { loadTelemetry, loadHistory, writeLabel, saveRetro, CONTEXT_LABELS } from './agent-retro.mjs';
+import { loadTelemetry, loadHistory, writeLabel, saveRetro, writeSprintConfig, CONTEXT_LABELS } from './agent-retro.mjs';
 import { TASKS } from './sessions.mjs';
 import { PARSABLE } from './agents.mjs';
 import { sessionView } from './telemetry.mjs';
@@ -30,7 +31,7 @@ function queryOpts(q) {
     top: q.top ? Number(q.top) : 15, tz: q.tz != null && q.tz !== '' ? Number(q.tz) : null,
     includeTranscripts: q.transcripts === '1', history: q.history !== '0',
     allSources: q.all === '1', errors: false, format: 'json',
-    allAgents: q.agents === '1', agent: q.agent || null,
+    allAgents: q.agents === '1', agent: q.agent || null, sprintPick: q.sprint || null,
   };
 }
 
@@ -104,6 +105,12 @@ export function startUi(o = {}) {
           const file = saveRetro(analysis.retro);
           cache.clear();
           return sendJson(res, 200, { ok: true, file });
+        }
+        if (url.pathname === '/api/config/sprint' && req.method === 'POST') {
+          const { sprint } = await readBody(req);
+          try { writeSprintConfig(sprint || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
+          cache.clear();
+          return sendJson(res, 200, { ok: true });
         }
         if (url.pathname === '/api/label' && req.method === 'POST') {
           const { sessionId, task } = await readBody(req);

@@ -11,6 +11,7 @@ reload) only from its own page.
   - `~/.claude/history.jsonl`
 - **What it writes:**
   - `~/.agent-retro/labels.json`, only when you correct a task label
+  - `~/.agent-retro/config.json`, only when you set a sprint calendar
   - `~/.agent-retro/retros/<date>.json`, only when you save a retro (action ids and metric
     baselines only)
   - export files, only when you pass `--export`

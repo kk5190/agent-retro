@@ -532,25 +532,67 @@ export function compareMetric(key, before, after) {
     verdict: change == null || Math.abs(change) < 0.1 ? 'flat' : (change < 0) === m.lowerIsBetter ? 'better' : 'worse' };
 }
 
+// ---------------------------------------------------------------------------
+// Sprints — the calendar the retro and its trend follow
+// ---------------------------------------------------------------------------
+const DAY = 864e5;
+/** "2026-09-16" → local midnight of that day, in ms. */
+export const localDay = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+
 /**
- * Compare two periods. With `split` (ms), before = sessions starting earlier, after = the rest;
- * otherwise the last `days` before the newest session versus the `days` before that.
- * Returns null unless both periods hold at least `minSessions` sessions.
+ * Sprint windows [from, to), newest first. With a calendar ({ start: 'YYYY-MM-DD', days }) they
+ * repeat every `days` from `start` (any past sprint start will do), and the first is the sprint
+ * in progress at `now`. Without one there is a single rolling window: the `days` before the newest
+ * session. Each window also counts its sessions.
  */
-export function comparePeriods(sessions, { split = null, days = 14, minSessions = 3 } = {}) {
+export function sprintWindows(sessions, calendar, { now = Date.now(), days = 14, count = 8 } = {}) {
+  const starts = sessions.filter((s) => s.start).map((s) => s.start);
+  const countIn = (from, to) => starts.filter((t) => t >= from && t < to).length;
+  if (!calendar) {
+    if (!starts.length) return [];
+    const to = Math.max(...starts) + 1;
+    return [{ from: to - days * DAY, to, current: false, rolling: true, sessions: countIn(to - days * DAY, to) }];
+  }
+  const len = calendar.days * DAY;
+  const origin = localDay(calendar.start);
+  const k = Math.floor((now - origin) / len);
+  // reach back to the earliest session (at least `count` sprints, at most two years)
+  const back = starts.length ? Math.ceil((now - Math.min(...starts)) / len) + 1 : count;
+  const n = Math.min(Math.max(count, back), Math.ceil(730 * DAY / len));
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const from = origin + (k - i) * len;
+    out.push({ from, to: from + len, current: i === 0, rolling: false, sessions: countIn(from, from + len) });
+  }
+  return out;
+}
+
+/** The sprint a retro reviews by default: the last completed one, or the current one if nothing is completed yet. */
+export function defaultSprint(windows) {
+  if (!windows.length) return null;
+  if (windows[0].rolling) return windows[0];
+  return windows.find((w) => !w.current && w.sessions) || windows[0];
+}
+
+/**
+ * Compare two periods and return per-metric verdicts, or null unless both hold `minSessions`.
+ *  - split (ms): before = sessions starting earlier, after = the rest;
+ *  - window ({ from, to }): that window against the equally long one just before it.
+ */
+export function comparePeriods(sessions, { split = null, window = null, minSessions = 3 } = {}) {
   const dated = sessions.filter((s) => s.start);
-  if (!dated.length) return null;
-  const latest = Math.max(...dated.map((s) => s.start));
-  const boundary = split || latest - days * 864e5;
-  const before = dated.filter((s) => s.start < boundary && (split || s.start >= boundary - days * 864e5));
-  const after = dated.filter((s) => s.start >= boundary);
+  if (!dated.length || (!split && !window)) return null;
+  const len = window ? window.to - window.from : 0;
+  const boundary = split || window.from;
+  const before = dated.filter((s) => s.start < boundary && (split || s.start >= boundary - len));
+  const after = dated.filter((s) => s.start >= boundary && (split || s.start < window.to));
   if (before.length < minSessions || after.length < minSessions) return null;
   const metrics = {};
   for (const key of Object.keys(TREND_METRICS)) {
     const c = compareMetric(key, TREND_METRICS[key].of(before), TREND_METRICS[key].of(after));
     if (c) metrics[key] = c;
   }
-  return { boundary: new Date(boundary).toISOString(), mode: split ? 'split' : 'rolling', days: split ? null : days, sessions: { before: before.length, after: after.length }, metrics };
+  return { boundary: new Date(boundary).toISOString(), mode: split ? 'split' : window.rolling ? 'rolling' : 'sprint', days: split ? null : Math.round(len / DAY), sessions: { before: before.length, after: after.length }, metrics };
 }
 
 // ---------------------------------------------------------------------------

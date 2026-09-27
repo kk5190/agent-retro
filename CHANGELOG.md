@@ -13,6 +13,9 @@
   - estimated context sources and compactions
   - working and waiting time
   - risk signals
+- **Sprint calendar** (start day plus length, e.g. two-week sprints starting Wednesdays): the
+  retro reviews the last completed sprint against the one before, with a picker for earlier
+  sprints. An *All sessions* overview covers everything in view.
 - **Sprint retro:** a sprint card; Went well / Didn't go well / Start / Stop; action items with
   fixes and the metric to watch; and Kaizen, with a review of the last saved retro. Available in
   the dashboard, as `--retro [--md]`, as `--save-retro`, and through the MCP tool `get_retro`.

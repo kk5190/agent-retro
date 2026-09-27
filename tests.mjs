@@ -566,3 +566,37 @@ test('cli: --retro --md is paste-ready, and --save-retro feeds the next retro', 
   assert.equal(saved.status, 0, saved.stderr);
   assert.match(saved.stderr, /retro saved to .*agent-retro-demo-.*\.agent-retro\/retros\//, 'writes inside the demo home only');
 });
+
+test('sprints: a Wednesday calendar gives aligned windows; the retro reviews the last completed one', async () => {
+  const { buildSessions, sprintWindows, defaultSprint, comparePeriods, localDay } = await import('./sessions.mjs');
+  const now = localDay('2026-09-27') + 12 * 3600e3; // a Sunday
+  const cal = { start: '2026-09-02', days: 14 }; // a Wednesday
+  const ev = [];
+  const add = (day, n) => { for (let i = 0; i < n; i++) { const sid = `${day}-${i}`; const ts = localDay(day) + (10 + i) * 3600e3; ev.push({ agent: 'x', sessionId: sid, ts, role: 'user', text: 'implement the reports page' }, { agent: 'x', sessionId: sid, ts: ts + 1000, role: 'assistant' }); } };
+  add('2026-08-25', 3); add('2026-09-08', 4); add('2026-09-20', 2);
+  const sessions = buildSessions(ev);
+  const w = sprintWindows(sessions, cal, { now, count: 3 });
+  const day = (t) => new Date(t).toLocaleDateString('en-CA');
+  assert.deepEqual(w.slice(0, 3).map((x) => [day(x.from), day(x.to - 1), x.current, x.sessions]), [
+    ['2026-09-16', '2026-09-29', true, 2], ['2026-09-02', '2026-09-15', false, 4], ['2026-08-19', '2026-09-01', false, 3]]);
+  assert.equal(new Date(w[1].from).getDay(), 3, 'sprints start on Wednesday');
+  assert.equal(defaultSprint(w), w[1], 'last completed sprint');
+  const t = comparePeriods(sessions, { window: w[1] });
+  assert.deepEqual([t.mode, t.days, t.sessions.before, t.sessions.after], ['sprint', 14, 3, 4]);
+  const rolling = sprintWindows(sessions, null);
+  assert.equal(rolling.length, 1);
+  assert.equal(rolling[0].rolling, true);
+});
+
+test('cli: --sprint-start/--save-sprint set the calendar; --sprint picks a window', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-sprint-'));
+  writeFixtures(home); // the Claude fixture sessions fall on 2026-03-01
+  const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8' });
+  assert.equal(run('--sprint-start', 'wednesday').status, 2, 'dates only');
+  const saved = run('--sprint-start', '2026-02-25', '--sprint-days', '14', '--save-sprint', '--retro');
+  assert.equal(saved.status, 0, saved.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, '.agent-retro', 'config.json'), 'utf8')).sprint, { start: '2026-02-25', days: 14 });
+  const picked = run('--retro', '--sprint', '2026-03-01');
+  assert.equal(picked.status, 0, picked.stderr);
+  assert.match(picked.stdout, /RETRO · sprint 2026-02-25 → 2026-03-10/);
+});

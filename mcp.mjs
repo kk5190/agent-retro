@@ -49,7 +49,7 @@ export const TOOLS = [
   {
     name: 'get_retro',
     description: 'A sprint retrospective of the last 14 days of agent use: a sprint card (sessions, spend, agent hours, main task), Went well / Didn\'t go well / Start / Stop items, the top three action items with fixes and the metric to watch, and Kaizen: one measured experiment plus a review of the last saved retro\'s action items (baseline → now). Good for "summarize my last sprint".',
-    inputSchema: { type: 'object', properties: { ...FILTERS } },
+    inputSchema: { type: 'object', properties: { ...FILTERS, sprint: { type: 'string', description: 'A date inside the sprint to review (YYYY-MM-DD); default: the last completed sprint' } } },
   },
   {
     name: 'get_extensions',
@@ -78,7 +78,7 @@ export function createServer(o = {}) {
   const cache = new Map();
 
   async function telemetry(args = {}) {
-    const f = { days: args.days || null, project: args.project || null };
+    const f = { days: args.days || null, project: args.project || null, sprintPick: args.sprint || null };
     const key = JSON.stringify(f);
     if (!cache.has(key)) {
       cache.set(key, (async () => {

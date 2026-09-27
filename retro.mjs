@@ -25,19 +25,20 @@ export function formatMetric(key, v) {
 }
 const firstSentence = (t) => { const m = /^[\s\S]*?[.!?](\s|$)/.exec(t || ''); return (m ? m[0] : t || '').trim(); };
 
-/** The sprint: sessions that started in the last SPRINT_DAYS days before the newest one. */
-function sprintSessions(sessions) {
-  const dated = sessions.filter((s) => s.start);
-  if (!dated.length) return { list: sessions, from: null, to: null };
-  const to = Math.max(...dated.map((s) => s.start));
-  const from = to - SPRINT_DAYS * 864e5;
-  return { list: dated.filter((s) => s.start >= from), from, to };
+/** Sessions that started inside the sprint window [from, to). */
+function sprintSessions(sessions, window) {
+  if (!window) return { list: sessions, from: null, to: null };
+  return { list: sessions.filter((s) => s.start && s.start >= window.from && s.start < window.to), from: window.from, to: window.to };
 }
 
-export function buildRetro(analysis, sessions, previous = null) {
+/**
+ * `window` is the sprint under review ({ from, to, current, rolling }, from sprintWindows);
+ * `calendar` is the configured sprint calendar or null (rolling 14 days).
+ */
+export function buildRetro(analysis, sessions, previous = null, window = null, calendar = null) {
   const a = analysis;
-  const { list, from, to } = sprintSessions(sessions);
-  const iso = (t) => (t ? new Date(t).toISOString().slice(0, 10) : null);
+  const { list, from, to } = sprintSessions(sessions, window);
+  const iso = (t) => (t ? new Date(t).toLocaleDateString('en-CA') : null); // local calendar day, like the sprint calendar
   const recs = a.recommendations || [];
 
   // Sprint card
@@ -53,9 +54,10 @@ export function buildRetro(analysis, sessions, previous = null) {
   };
 
   // Went well
+  const trendNote = !a.trend ? '' : a.trend.mode === 'sprint' ? 'This sprint against the previous one.' : a.trend.mode === 'split' ? `Before and after ${a.trend.boundary.slice(0, 10)}.` : `Last ${a.trend.days} days against the ${a.trend.days} before.`;
   const wentWell = [];
   const trend = a.trend ? Object.entries(a.trend.metrics) : [];
-  for (const [key, m] of trend) if (m.verdict === 'better') wentWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: 'Last 14 days against the 14 before.', section: 'changes' });
+  for (const [key, m] of trend) if (m.verdict === 'better') wentWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
   for (const p of ((a.prompting || {}).practices || [])) if (p.outcome && p.outcome.helps && p.share >= 0.3) {
     wentWell.push({ text: `You ${p.label.charAt(0).toLowerCase() + p.label.slice(1)} in ${pct(p.share)} of openings`, detail: `Those sessions needed ${p.outcome.with.medianFollowUps} follow-ups; without it, ${p.outcome.without.medianFollowUps}.`, section: 'prompting' });
   }
@@ -68,7 +70,7 @@ export function buildRetro(analysis, sessions, previous = null) {
   // Didn't go well
   const didntGoWell = [];
   for (const f of (a.findings || [])) if (f.level === 'attention') didntGoWell.push({ text: f.title, detail: f.detail, section: f.section });
-  for (const [key, m] of trend) if (m.verdict === 'worse' && !didntGoWell.some((x) => x.text.startsWith(m.label))) didntGoWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: 'Last 14 days against the 14 before.', section: 'changes' });
+  for (const [key, m] of trend) if (m.verdict === 'worse' && !didntGoWell.some((x) => x.text.startsWith(m.label))) didntGoWell.push({ text: `${m.label}: ${formatMetric(key, m.before)} → ${formatMetric(key, m.after)}`, detail: trendNote, section: 'changes' });
 
   // Start / Stop
   const toItem = (r) => ({ text: r.title, detail: firstSentence(r.action), section: 'changes', recId: r.id });
@@ -87,7 +89,8 @@ export function buildRetro(analysis, sessions, previous = null) {
   const exp = actions.find((x) => x.metric);
   const today = iso(Date.now());
   const kaizen = {
-    experiment: exp ? { title: exp.title, metric: exp.metric, check: `agent-retro --split ${today}`, days: SPRINT_DAYS } : null,
+    experiment: exp ? { title: exp.title, metric: exp.metric, days: calendar ? calendar.days : SPRINT_DAYS,
+      check: calendar ? 'agent-retro --retro at the end of next sprint' : `agent-retro --split ${today}` } : null,
     review: previous ? {
       savedAt: previous.savedAt,
       items: (previous.actions || []).map((p) => {
@@ -104,7 +107,7 @@ export function buildRetro(analysis, sessions, previous = null) {
       + (win ? ` Biggest win: ${win.text.charAt(0).toLowerCase() + win.text.slice(1)}.` : '') + (drag ? ` Biggest drag: ${drag.text.charAt(0).toLowerCase() + drag.text.slice(1).replace(/\.$/, '')}.` : '');
 
   return {
-    period: { from: iso(from), to: iso(to), days: from ? SPRINT_DAYS : null },
+    period: { from: iso(from), to: iso(to ? to - 1 : null), days: from ? Math.round((to - from) / 864e5) : null, current: !!(window && window.current), calendar: !!calendar },
     card, headline,
     wentWell: wentWell.slice(0, MAX), didntGoWell: didntGoWell.slice(0, MAX), start: start.slice(0, MAX), stop: stop.slice(0, MAX),
     actions, kaizen,

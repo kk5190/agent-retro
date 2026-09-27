@@ -49,6 +49,10 @@
  *   --demo                  Use a built-in month of synthetic sessions instead of your logs
  *   --retro                 Print only the sprint retro (with --md: paste-ready markdown)
  *   --save-retro            Save this retro's action items so the next one reviews them
+ *   --sprint-start <date>   Your sprint calendar: any sprint's first day (e.g. a Wednesday)
+ *   --sprint-days <n>       Sprint length in days (default 14)
+ *   --save-sprint           Remember --sprint-start/--sprint-days in ~/.agent-retro/config.json
+ *   --sprint <date>         Review the sprint containing <date> (default: the last completed one)
  *   --no-history            Skip ~/.claude/history.jsonl
  *   --all-sources           Include SDK/system-injected prompts too
  *   --errors                Print parse warnings to stderr
@@ -62,7 +66,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, TASK_IDS, toolBucket } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, sprintWindows, defaultSprint, localDay, TASK_IDS, toolBucket } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -107,6 +111,10 @@ function parseArgs(argv) {
       case '--demo': o.demo = true; break;
       case '--retro': o.retro = true; break;
       case '--save-retro': o.saveRetro = true; break;
+      case '--sprint-start': o.sprintStart = next(); break;
+      case '--sprint-days': o.sprintDays = Number(next()); break;
+      case '--sprint': o.sprintPick = next(); break;
+      case '--save-sprint': o.saveSprint = true; break;
       case '--no-history': o.history = false; break;
       case '--all-sources': o.allSources = true; break;
       case '--errors': o.errors = true; break;
@@ -130,6 +138,38 @@ export function readLabels() {
   try { return JSON.parse(fs.readFileSync(labelsFile(), 'utf8')); } catch { return {}; }
 }
 /** Set (or with task null, clear) the label for one session. */
+// ---------------------------------------------------------------------------
+// Settings — ~/.agent-retro/config.json (currently the sprint calendar)
+// ---------------------------------------------------------------------------
+const configFile = () => path.join(home(), '.agent-retro', 'config.json');
+export function readConfig() {
+  try { return JSON.parse(fs.readFileSync(configFile(), 'utf8')); } catch { return {}; }
+}
+/** Set (or with null, clear) the sprint calendar: { start: 'YYYY-MM-DD', days }. */
+export function writeSprintConfig(sprint) {
+  if (sprint != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(sprint.start || '')) || Number.isNaN(Date.parse(sprint.start))) throw new Error('sprint start must be a date like 2026-09-16');
+    const days = Number(sprint.days);
+    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error('sprint length must be 1–90 days');
+    sprint = { start: sprint.start, days };
+  }
+  const cfg = readConfig();
+  if (sprint == null) delete cfg.sprint; else cfg.sprint = sprint;
+  fs.mkdirSync(path.dirname(configFile()), { recursive: true });
+  fs.writeFileSync(configFile(), JSON.stringify(cfg, null, 2) + '\n');
+  return cfg;
+}
+
+/** All sessions in view, at a glance (the retro covers one sprint; this covers everything). */
+function overview(a, sessions) {
+  const tasks = Object.entries(a.tasks || {}).slice(0, 3).map(([id, t]) => ({ id, label: t.label, share: t.share }));
+  return {
+    sessions: sessions.length, prompts: a.volume.prompts, first: a.scope.first, last: a.scope.last, activeDays: a.scope.activeDays,
+    spend: a.cost.usd, tokens: a.tokens.total, agentHours: +(((a.time || {}).agentMinutes || 0) / 60).toFixed(1), topTasks: tasks,
+    recommendations: (a.recommendations || []).length,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Saved retros — action items and metric baselines, so the next retro can review them
 // ---------------------------------------------------------------------------
@@ -174,14 +214,22 @@ export async function loadTelemetry(o) {
   const sessions = buildSessions(events, { ...o, labels: o.labels || readLabels() });
   data.sessions = sessions.filter((s) => s.start).map((s) => ({ proj: s.project, turns: s.turns.assistant, first: s.start, last: s.end, agent: s.agent }));
   const analysis = analyze(data, o, sessions);
-  analysis.trend = comparePeriods(sessions, { split: o.split ? Date.parse(o.split) : null });
+  // Sprint: a calendar from flags or ~/.agent-retro/config.json, else a rolling 14 days
+  const calendar = o.sprintStart ? { start: o.sprintStart, days: o.sprintDays || 14 } : readConfig().sprint || null;
+  const windows = sprintWindows(sessions, calendar);
+  const pick = o.sprintPick ? localDay(o.sprintPick) : null;
+  const selected = (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultSprint(windows);
+  const isoDay = (t) => new Date(t).toLocaleDateString('en-CA');
+  analysis.sprint = { calendar, windows: windows.map((w) => ({ from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
+  analysis.trend = comparePeriods(sessions, o.split ? { split: Date.parse(o.split) } : { window: selected });
   const config = readClaudeConfig();
   analysis.extensions = summarizeExtensions(sessions, analysis.inventory, config);
   analysis.recommendations = recommend(analysis, sessions, config).map((r) => {
     const m = analysis.trend && analysis.trend.metrics[REC_METRIC[r.id]];
     return m ? { ...r, trend: { metric: REC_METRIC[r.id], ...m } } : r;
   });
-  analysis.retro = buildRetro(analysis, sessions, latestRetro());
+  analysis.retro = buildRetro(analysis, sessions, latestRetro(), selected, calendar);
+  analysis.overview = overview(analysis, sessions);
   return { data, sessions, analysis };
 }
 
@@ -488,13 +536,15 @@ function deriveFindings(a, sessions) {
 function bar(v, max, width = 30) { return '█'.repeat(max ? Math.round((v / max) * width) : 0); }
 
 const fmtMetric = (m, v) => (m.usd ? '$' + v.toFixed(2) : m.share ? Math.round(v * 100) + '%' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(+v.toFixed(2)));
-const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `last ${t.days} days vs the ${t.days} before`);
+const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : t.mode === 'sprint' ? 'this sprint vs the previous one' : `last ${t.days} days vs the ${t.days} before`);
 
 const RETRO_COLUMNS = [['wentWell', 'Went well'], ['didntGoWell', "Didn't go well"], ['start', 'Start'], ['stop', 'Stop']];
 
+const retroPeriod = (r) => (!r.period.from ? 'all sessions' : `${r.period.calendar ? 'sprint' : 'last ' + r.period.days + ' days'} ${r.period.from} → ${r.period.to}${r.period.current ? ' (in progress)' : ''}`);
+
 function retroText(r) {
   if (!r) return [];
-  const L = ['', `=== RETRO · ${r.period.from ? `${r.period.from} → ${r.period.to} (last ${r.period.days} days)` : 'all sessions'} ===`, `  ${r.headline}`];
+  const L = ['', `=== RETRO · ${retroPeriod(r)} ===`, `  ${r.headline}`];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push('', `  ${title.toUpperCase()}`);
     if (!r[key].length) L.push('    —');
@@ -516,7 +566,7 @@ function retroText(r) {
 
 function retroMd(r) {
   if (!r) return [];
-  const L = [`## Retro: ${r.period.from ? `${r.period.from} → ${r.period.to}` : 'all sessions'}`, '', r.headline, ''];
+  const L = [`## Retro: ${retroPeriod(r)}`, '', r.headline, ''];
   for (const [key, title] of RETRO_COLUMNS) {
     L.push(`### ${title}`, '');
     if (!r[key].length) L.push('- —');
@@ -823,6 +873,15 @@ async function main() {
     return;
   }
 
+  if (o.sprintStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.sprintStart) || Number.isNaN(Date.parse(o.sprintStart)))) { console.error('--sprint-start needs a date like 2026-09-16'); process.exit(2); }
+  if (o.sprintPick && Number.isNaN(Date.parse(o.sprintPick))) { console.error('--sprint needs a date like 2026-09-20'); process.exit(2); }
+  if (o.saveSprint) {
+    {
+      if (!o.sprintStart) { console.error('--save-sprint needs --sprint-start <date> (and optionally --sprint-days <n>)'); process.exit(2); }
+      try { writeSprintConfig({ start: o.sprintStart, days: o.sprintDays || 14 }); } catch (err) { console.error(err.message); process.exit(2); }
+      console.error(`[agent-retro] sprint calendar saved: ${o.sprintDays || 14}-day sprints starting ${o.sprintStart}.`);
+    }
+  }
   if (o.split && Number.isNaN(Date.parse(o.split))) { console.error('--split needs a date, e.g. 2026-09-01'); process.exit(2); }
   if (o.label) {
     const i = o.label.indexOf('=');

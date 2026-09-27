@@ -268,6 +268,14 @@
   .vq q { display: block; color: var(--ink-2); margin-bottom: 6px; }
   .miss { display: inline-block; font-size: 11.5px; padding: 1px 8px; margin: 0 4px 4px 0; border-radius: 999px; background: var(--alert-soft); color: var(--alert); }
 
+  nav.rail li.grp { padding: 14px 0 4px 14px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  nav.rail li.grp:first-child { padding-top: 0; }
+  @media (max-width: 1000px) { nav.rail li.grp { display: none; } }
+  .sprintbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; }
+  .sprintbar > label { font-size: 12px; color: var(--ink-3); }
+  .sprintbar input[type=date] { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 5px 8px; }
+  #sprintSettings[open] .adv-panel { left: 0; right: auto; }
+
   /* Retro board ------------------------------------------------------------------ */
   .card { margin: 24px 0 18px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
   .card .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
@@ -336,7 +344,10 @@
 <div class="wrap">
   <nav class="rail" aria-label="Sections">
     <ol>
+      <li class="grp">This sprint</li>
       <li><a href="#summary">Retro</a></li>
+      <li class="grp">All sessions</li>
+      <li><a href="#overview">Overview</a></li>
       <li><a href="#changes">What to change</a></li>
       <li><a href="#tasks">What you work on</a></li>
       <li><a href="#tokens">Where tokens go</a></li>
@@ -354,12 +365,36 @@
     <section id="summary" class="intro">
       <h1>Your agent retro</h1>
       <p id="scope">Reading your local agent logs…</p>
+      <div class="sprintbar">
+        <label for="sprintSel">Sprint</label>
+        <select id="sprintSel"></select>
+        <details class="adv" id="sprintSettings">
+          <summary>Sprint settings</summary>
+          <form class="adv-panel" id="sprintForm">
+            <label for="sprintStart" style="display:block">First day of any sprint<small>e.g. a Wednesday your sprint starts on</small></label>
+            <input type="date" id="sprintStart" required />
+            <label for="sprintDays" style="display:block">Length</label>
+            <select id="sprintDays"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select>
+            <div style="display:flex;gap:8px;align-items:center"><button type="submit" class="primary">Save</button><button type="button" id="sprintClear">Use rolling 14 days</button></div>
+            <span class="status" id="sprintStatus" style="text-align:left"></span>
+          </form>
+        </details>
+      </div>
       <div class="card" id="sprintCard"></div>
       <div class="board" id="board"></div>
       <div class="grid g2 gap retro-foot">
         <div class="panel"><h3>Action items</h3><p class="hint">The three changes with the most impact, each with a fix and the number that will show whether it worked.</p><ol class="actions" id="actions"></ol></div>
         <div class="panel"><h3>Kaizen</h3><p class="hint">One small experiment, measured. Save the retro and the next one checks how its action items moved.</p><div id="kaizen"></div></div>
       </div>
+    </section>
+
+    <section id="overview" class="part">
+      <header>
+        <h2>All sessions</h2>
+        <p>The retro above covers one sprint. Everything from here down covers every session in view. Narrow it with Project and Period at the top.</p>
+      </header>
+      <div class="kpis" id="overviewKpis"></div>
+      <div class="panel"><h3>What you spend it on</h3><p class="hint">Share of all sessions by task.</p><div class="bars" id="overviewTasks"></div></div>
     </section>
 
     <section id="changes" class="part">
@@ -688,11 +723,38 @@ function dailyTable(id, series, valueOf, fmtV) {
 }
 
 /* ---- summary ---- */
+/* ---- sprint picker + settings ---- */
+function renderSprint(a) {
+  const sp = a.sprint || { windows: [] };
+  const label = (w) => `${dateStr(w.from)} – ${dateStr(w.to)}${w.current ? ' (in progress)' : ''} · ${w.sessions} session${w.sessions === 1 ? '' : 's'}`;
+  // hide empty sprints older than your first one with sessions
+  const lastWithData = sp.windows.reduce((i, w, k) => (w.sessions ? k : i), 0);
+  const shown = sp.windows.filter((w, k) => w.current || k <= lastWithData || w.from === sp.selected);
+  $('sprintSel').innerHTML = shown.length ? shown.map((w) => `<option value="${esc(w.from)}"${w.from === sp.selected ? ' selected' : ''}>${esc(sp.calendar ? label(w) : 'Last 14 days of activity')}</option>`).join('') : '<option>No sessions</option>';
+  $('sprintSel').disabled = !sp.calendar;
+  if (sp.calendar) { $('sprintStart').value = sp.calendar.start; $('sprintDays').value = String(sp.calendar.days); }
+}
+
+function renderOverview(a, sessions) {
+  const ov = a.overview;
+  if (!ov) return;
+  kpis('overviewKpis', [
+    ['sessions', fmt(ov.sessions), `${dateStr(ov.first)} – ${dateStr(ov.last)}`],
+    ['active days', fmt(ov.activeDays), `${fmt(ov.prompts)} of your prompts`],
+    ['recorded spend', ov.spend ? '$' + ov.spend.toLocaleString() : '—', `${fmtN(ov.tokens)} tokens`],
+    ['agent working time', `${ov.agentHours} h`, 'gaps under 30 min between actions'],
+    ['changes suggested', fmt(ov.recommendations), 'see What to change'],
+  ]);
+  bars('overviewTasks', Object.entries(a.tasks || {}).map(([, t]) => [t.label, t.sessions]), { total: ov.sessions });
+}
+
 function renderSummary(a, sessions) {
   const agents = Object.keys(a.agents || {});
   const who = agents.length > 1 ? `${agents.length} agents` : (!agents[0] || agents[0] === 'claude' ? 'Claude Code' : agents[0]);
   const r = a.retro;
-  $('scope').textContent = r && r.period.from ? `Sprint of ${dateStr(r.period.from)} – ${dateStr(r.period.to)} (the last ${r.period.days} days of activity), from ${who}. Patterns below cover all ${fmt(sessions.length)} sessions in view.` : `${fmt(sessions.length)} sessions from ${who}.`;
+  $('scope').textContent = r && r.period.from
+    ? `${r.period.calendar ? `Sprint of ${dateStr(r.period.from)} – ${dateStr(r.period.to)}${r.period.current ? ', in progress' : ''}` : `The last ${r.period.days} days of activity (${dateStr(r.period.from)} – ${dateStr(r.period.to)})`}, from ${who}. Trends compare it with the ${r.period.calendar ? 'previous sprint' : 'two weeks before'}.`
+    : `${fmt(sessions.length)} sessions from ${who}.`;
   if (!r) return;
   const c = r.card;
   $('sprintCard').innerHTML = `<div class="nums">
@@ -722,7 +784,7 @@ function renderSummary(a, sessions) {
 /* ---- trends ---- */
 const VERDICT = { better: '↓ better', worse: '↑ worse', flat: '→ about the same' };
 const fmtM = (m, v) => (m.usd ? money(v) : m.share ? Math.round(v * 100) + '%' : fmtN(v));
-const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : `last ${t.days} days vs the ${t.days} before`);
+const trendWindow = (t) => (t.mode === 'split' ? `before vs after ${t.boundary.slice(0, 10)}` : t.mode === 'sprint' ? 'this sprint vs the previous one' : `last ${t.days} days vs the ${t.days} before`);
 function renderTrend(a) {
   const t = a.trend;
   if (!t) { $('trendHint').textContent = 'Needs at least 3 sessions in each of the last two 14-day periods. Keep using your agents and check back.'; $('trendTable').innerHTML = ''; return; }
@@ -1086,6 +1148,7 @@ function query() {
   const ag = $('agentSel').value;
   if (ag === 'all') q.set('agents', '1'); else if (ag) q.set('agent', ag);
   if ($('project').value) q.set('project', $('project').value);
+  if (!$('sprintSel').disabled && $('sprintSel').value) q.set('sprint', $('sprintSel').value);
   if ($('days').value) q.set('days', $('days').value);
   if ($('transcripts').checked) q.set('transcripts', '1');
   if ($('all').checked) q.set('all', '1');
@@ -1108,7 +1171,7 @@ async function load() {
     const t0 = performance.now(); const q = query();
     const [a, ss] = await Promise.all([getJson('/api/data?' + q), getJson('/api/sessions?' + q)]);
     SESSIONS = ss.sessions || [];
-    renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
+    renderSprint(a); renderSummary(a, SESSIONS); renderOverview(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
     renderRisk(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
     dispatchEvent(new Event('scroll'));
     $('foot').textContent = `Generated ${new Date(a.generatedAt).toLocaleString()} from local logs. Nothing leaves this machine.`;
@@ -1130,6 +1193,16 @@ async function init() {
   ['agentSel', 'project', 'days', 'transcripts', 'all'].forEach((id) => $(id).addEventListener('change', load));
   $('refresh').addEventListener('click', async () => { try { await postJson('/api/reload', {}); } catch { /* load() reports it */ } load(); });
   ['taskFilter', 'sessSort'].forEach((id) => $(id).addEventListener('change', renderExplorer));
+  $('sprintSel').addEventListener('change', load);
+  $('sprintForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await postJson('/api/config/sprint', { sprint: { start: $('sprintStart').value, days: Number($('sprintDays').value) } }); $('sprintSel').disabled = true; $('sprintStatus').textContent = 'Saved.'; $('sprintSettings').open = false; load(); }
+    catch (err) { $('sprintStatus').textContent = err.message; }
+  });
+  $('sprintClear').addEventListener('click', async () => {
+    try { await postJson('/api/config/sprint', { sprint: null }); $('sprintStatus').textContent = 'Using the last 14 days.'; load(); }
+    catch (err) { $('sprintStatus').textContent = err.message; }
+  });
   let timer; $('sessSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderExplorer, 120); });
   watchSections();
   load();
