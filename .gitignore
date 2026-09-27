@@ -1,0 +1,5 @@
+node_modules/
+telemetry/
+*.log
+.DS_Store
+.claude/

@@ -1,0 +1,49 @@
+{
+  "name": "agent-retro",
+  "version": "0.1.0",
+  "description": "Retrospectives for your coding-agent sessions: reads local Claude Code, Codex, pi, opencode, Continue, Zed and Cursor logs, finds what you work on and where tokens, time and failures go, and recommends concrete changes. Local dashboard, versioned export, MCP server.",
+  "type": "module",
+  "bin": {
+    "agent-retro": "agent-retro.mjs"
+  },
+  "exports": {
+    ".": "./agent-retro.mjs",
+    "./agents": "./agents.mjs",
+    "./sessions": "./sessions.mjs",
+    "./telemetry": "./telemetry.mjs",
+    "./schema": "./schema/telemetry.schema.json",
+    "./recommend": "./recommend.mjs"
+  },
+  "files": [
+    "agent-retro.mjs",
+    "agents.mjs",
+    "sessions.mjs",
+    "telemetry.mjs",
+    "prompts.mjs",
+    "recommend.mjs",
+    "fixtures.mjs",
+    "mcp.mjs",
+    "ui.mjs",
+    "ui/index.html",
+    "schema/telemetry.schema.json"
+  ],
+  "scripts": {
+    "test": "node --test tests.mjs",
+    "start": "node agent-retro.mjs --ui --open",
+    "demo": "node agent-retro.mjs --demo --ui --open"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "coding-agent",
+    "telemetry",
+    "transcripts",
+    "mcp",
+    "developer-productivity",
+    "analytics"
+  ],
+  "license": "MIT"
+}
