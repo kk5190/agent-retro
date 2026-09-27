@@ -83,6 +83,7 @@
 
   /* KPIs -------------------------------------------------------------------- */
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); margin-bottom: 16px; overflow: hidden; }
+  #editKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi { padding: 14px 18px; box-shadow: 1px 0 0 var(--rule), 0 1px 0 var(--rule); }
   .kpi .v { font: 600 24px/1.2 var(--display); letter-spacing: -0.02em; }
   .kpi .k { font-size: 13px; color: var(--ink-2); }
@@ -502,6 +503,10 @@
         <div class="panel"><h3>Why tools fail</h3><p class="hint" id="errHint">Failed tool calls by cause.</p><div class="bars" id="errClasses"></div>
           <p class="hint" style="margin:16px 0 8px">By tool</p><div class="bars" id="errTools"></div></div>
         <div class="panel"><h3>Shell commands</h3><p class="hint">Most-run commands, all sessions.</p><div class="bars" id="shell"></div></div>
+      </div>
+      <div class="grid g2 gap" id="editing">
+        <div class="panel"><h3>How the agent edits</h3><p class="hint">Edits made without reading the file first, and files patched again and again, are where broken code and rework come from.</p><div class="kpis" id="editKpis"></div></div>
+        <div class="panel"><h3>When you stop it</h3><p class="hint" id="intHint">Your interruptions (Esc), by the last tool the agent ran before you stopped it.</p><div class="bars" id="interrupts"></div></div>
       </div>
       <div class="panel gap"><h3>Command sequences you repeat</h3><p class="hint">Runs of 3–5 shell commands that recur across sessions: candidates for a script or a saved command.</p><div id="workflows"></div></div>
     </section>
@@ -945,6 +950,21 @@ function renderShape(a, sessions) {
 /* ---- tools ---- */
 /** Kinds of action in a fixed order: colour follows the kind, never its rank. */
 const BUCKET = [['shell', 'Shell commands', 'var(--s1)'], ['browser', 'Browser', 'var(--s2)'], ['edit', 'File edits', 'var(--s3)'], ['read', 'Reading & search', 'var(--s4)'], ['agent', 'Agents & planning', 'var(--s5)'], ['web', 'Web fetch', 'var(--s6)'], ['other', 'Other', 'var(--s-other)']];
+function renderEditing(a) {
+  const e = a.editing;
+  if (!e) return;
+  kpis('editKpis', e.edits ? [
+    ['reads per edit', e.readsPerEdit, 'reads, searches and listings per edit'],
+    ['edits without a read', rate(e.blindShare), `${fmt(e.blind)} of ${fmt(e.edits)} edits`],
+    ['files patched 5+ times', fmt(e.reworkedFiles), `in ${fmt(e.reworkSessions)} of ${fmt(e.editSessions)} sessions with edits`],
+    ['full rewrites', fmt(e.rewrites), 'a file written over after it was read'],
+  ] : [['edits', '0', 'no edits in this selection']]);
+  $('intHint').textContent = e.interruptions
+    ? `${fmt(e.interruptions)} interruptions in ${fmt(e.interruptedSessions)} of ${fmt(a.sessions.count)} sessions, by the last tool the agent ran before you stopped it.`
+    : 'You did not interrupt the agent in this selection.';
+  bars('interrupts', topN(e.interruptedAfter, 6), { total: e.interruptions, label: (k) => (k === '(reply)' ? 'While it was replying' : prettyTool(k)) });
+}
+
 function renderTools(a, sessions) {
   const b = a.tools.buckets, total = a.tools.total;
   const segs = BUCKET.filter(([k]) => b[k] > 0);
@@ -969,7 +989,7 @@ function renderTools(a, sessions) {
   const W = a.workflows || [];
   $('workflows').innerHTML = W.length ? W.map((w) => `<div class="seq">${w.steps.map((x) => `<code>${esc(x)}</code>`).join('<span aria-hidden="true">→</span>')}<span class="n">${w.sessions} sessions</span></div>`).join('') : '<p class="empty">No sequence repeats across 3 or more sessions yet.</p>';
 }
-const ERR_LABEL = { 'invalid-input': 'Wrong arguments or order', timeout: 'Timed out', 'command-failed': 'Command exited with an error', 'not-found': 'Target no longer there', environment: 'Environment (ports, missing tools)', service: 'Model or service unavailable', permission: 'No file permission', 'stale-file': 'File changed since read', other: 'Other', unknown: 'No message' };
+const ERR_LABEL = { 'invalid-input': 'Wrong arguments or order', timeout: 'Timed out', 'command-failed': 'Command exited with an error', 'not-found': 'Target no longer there', environment: 'Environment (ports, missing tools)', service: 'Model or service unavailable', permission: 'No file permission', 'stale-file': 'File changed since read', unfinished: 'Never finished (session crashed or was killed)', other: 'Other', unknown: 'No message' };
 
 /* ---- extensions: sortable tables ---- */
 const tableState = {};
@@ -1438,7 +1458,7 @@ async function load() {
     const [a, ss] = await Promise.all([getJson('/api/data?' + q), getJson('/api/sessions?' + q)]);
     SESSIONS = ss.sessions || [];
     renderPeriod(a); renderHome(a); renderDigest(a); renderSummary(a, SESSIONS); renderRecs(a); renderTrend(a); renderTasks(a); renderTokens(a); renderShape(a, SESSIONS); renderTools(a, SESSIONS); renderExtensions(a);
-    renderRisk(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
+    renderRisk(a); renderEditing(a); renderRhythm(a); renderPrompting(a); renderMore(a); renderExplorer();
     $('foot').textContent = `Generated ${new Date(a.generatedAt).toLocaleString()} from local logs. Nothing leaves this machine.`;
     st.className = 'status'; st.textContent = '';
     if (!loaded) { loaded = true; if (location.hash.length > 1) route(); } // a link to a section can only scroll once it has content

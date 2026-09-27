@@ -920,6 +920,38 @@
             "type": "number"
           }
         },
+        "editing": {
+          "type": "object",
+          "description": "Edit habits: edits, edits to a file the thread never read (blind), full rewrites of a file it had read, files edited 5+ times (reworked)",
+          "required": [
+            "edits",
+            "blind",
+            "rewrites",
+            "reworkedFiles"
+          ],
+          "properties": {
+            "edits": {
+              "type": "number",
+              "minimum": 0
+            },
+            "blind": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rewrites": {
+              "type": "number",
+              "minimum": 0
+            },
+            "reworkedFiles": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "interruptedAfter": {
+          "$ref": "#/$defs/counts",
+          "description": "Your interruptions, by the last tool the agent ran before you stopped it ('(reply)' when it had not run one since your prompt)"
+        },
         "skills": {
           "$ref": "#/$defs/counts"
         },

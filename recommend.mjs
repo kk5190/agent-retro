@@ -41,7 +41,7 @@ export function readClaudeConfig() {
 const LEVEL = { high: 0, medium: 1, low: 2 };
 
 /** The trend metric (sessions.mjs TREND_METRICS) each recommendation is meant to move. */
-export const REC_METRIC = { 'unused-plugins': 'listingTokensPerSession', 'unused-skills': 'listingTokensPerSession', 'unused-mcp': 'listingTokensPerSession', screenshots: 'browserOutputShare', 'context-pressure': 'highContextShare', 'check-ins': 'ackRate', secrets: 'sensitivePerSession', 'flaky-tools': 'toolErrorRate' };
+export const REC_METRIC = { 'blind-edits': 'blindEditShare', 'unused-plugins': 'listingTokensPerSession', 'unused-skills': 'listingTokensPerSession', 'unused-mcp': 'listingTokensPerSession', screenshots: 'browserOutputShare', 'context-pressure': 'highContextShare', 'check-ins': 'ackRate', secrets: 'sensitivePerSession', 'flaky-tools': 'toolErrorRate' };
 const sum = (arr, f) => arr.reduce((x, v) => x + f(v), 0);
 const pct = (x) => Math.round(100 * x);
 const k = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n));
@@ -165,6 +165,32 @@ function checkIns({ sessions }) {
     evidence: `${acks} of ${human} prompts (${pct(acks / human)}%) were just “yes”, “continue”, “ok” or similar — the agent stopped and waited for a go-ahead it did not need.`,
     action: 'Tell the agent to keep going through an approved plan and only stop for decisions.',
     fix: { kind: 'claude-md', target: '~/.claude/CLAUDE.md', content: '- Once I approve a plan, carry it out to the end without pausing for confirmation between steps. Stop only for a decision you cannot make from the plan, or before anything destructive.' },
+  };
+}
+
+function blindEdits({ sessions }) {
+  const edits = sum(sessions, (s) => s.editing.edits);
+  const blind = sum(sessions, (s) => s.editing.blind);
+  if (edits < 20 || blind / edits < 0.1) return null;
+  return {
+    id: 'blind-edits', level: blind / edits >= 0.25 ? 'high' : 'medium',
+    title: 'Have the agent read a file before it edits it',
+    evidence: `${blind} of ${edits} edits (${pct(blind / edits)}%) changed a file the agent had not read in that conversation, by a read tool or a shell command. Edits made blind are the ones that break code or need redoing.`,
+    action: 'Ask for a read before every edit, and a fresh read when an edit fails.',
+    fix: { kind: 'claude-md', target: '~/.claude/CLAUDE.md', content: '- Read a file (or the part you will change) before editing it, and read it again after an edit fails instead of retrying from memory.' },
+  };
+}
+
+function editLoops({ sessions }) {
+  const editing = sessions.filter((s) => s.editing.edits);
+  const looped = editing.filter((s) => s.editing.reworkedFiles);
+  if (editing.length < 5 || looped.length / editing.length < 0.2) return null;
+  return {
+    id: 'edit-loops', level: 'medium',
+    title: 'Step back when one file keeps needing fixes',
+    evidence: `In ${looped.length} of ${editing.length} sessions that edited code (${pct(looped.length / editing.length)}%), the agent edited the same file 5 or more times. Repeated patching usually means the approach, not the line, is wrong.`,
+    action: 'After a couple of failed fixes to one file, have the agent stop, say what it has learned, and propose a different approach.',
+    fix: { kind: 'claude-md', target: '~/.claude/CLAUDE.md', content: '- If the same file needs a third fix for one problem, stop editing: explain what you have tried and what you have learned, and propose a different approach before changing it again.' },
   };
 }
 
@@ -375,7 +401,7 @@ function allowlist({ sessions, config }) {
   };
 }
 
-export const RULES = [unusedPlugins, unusedSkills, unusedMcp, screenshots, contextPressure, secrets, flakyTools, heavyHooks, checkIns, promptPractices, playbooks, heavySkills, workflowCommand, repeatedPrompts, allowlist];
+export const RULES = [unusedPlugins, unusedSkills, unusedMcp, screenshots, contextPressure, secrets, flakyTools, blindEdits, editLoops, heavyHooks, checkIns, promptPractices, playbooks, heavySkills, workflowCommand, repeatedPrompts, allowlist];
 
 /** Run every rule; highest-impact first. `config` defaults to the user's Claude Code config. */
 export function recommend(analysis, sessions, config = readClaudeConfig()) {

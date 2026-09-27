@@ -26,11 +26,15 @@
   - context pressure
   - secrets
   - failing tools
+  - edits without a read, and edit loops on one file
   - check-ins
   - repeated prompts and command sequences
   - heavy hooks and skills
   - opening-prompt practices
   - per-task workflow playbooks
+- **How the agent edits:** reads per edit, edits without a read, files patched 5+ times, full
+  rewrites; your interruptions by the tool running when you stopped it; and tool calls that never
+  finished, as their own failure cause.
 - **Extensions analysis:** plugins, skills, MCP servers, hooks, subagents and slash commands,
   loaded versus used.
 - **Prompt practices:** zero-, one- and few-shot shares, techniques, and practices compared with

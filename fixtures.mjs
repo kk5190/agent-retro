@@ -51,10 +51,12 @@ export function writeFixtures(HOME) {
   ]);
 
   // Claude Code: three archetypal sessions + a subagent transcript for the review one.
-  const J = (o) => JSON.stringify(o);
+  const J = (o) => (typeof o === 'string' ? o : JSON.stringify(o));
   const cl = (sid, t, extra) => ({ sessionId: sid, timestamp: `2026-03-01T10:${String(t).padStart(2, '0')}:00Z`, cwd: '/Users/x/workspace/rev', gitBranch: 'main', ...extra });
   const user = (sid, t, text) => cl(sid, t, { type: 'user', promptSource: 'typed', message: { role: 'user', content: text } });
-  const tool = (sid, t, name, input, usage) => cl(sid, t, { type: 'assistant', message: { model: 'claude-opus-5-5', role: 'assistant', usage, content: [{ type: 'tool_use', id: `tu${t}`, name, input }] } });
+  // a tool call and its (empty) result, as Claude Code logs them: calls without a result count as unfinished
+  const tool = (sid, t, name, input, usage) => [cl(sid, t, { type: 'assistant', message: { model: 'claude-opus-5-5', role: 'assistant', usage, content: [{ type: 'tool_use', id: `${sid}-tu${t}`, name, input }] } }),
+    cl(sid, t, { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `${sid}-tu${t}`, content: '' }] } })].map((r) => JSON.stringify(r)).join('\n');
   const errResult = (sid, t) => cl(sid, t, { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', is_error: true, content: 'boom' }] } });
   const U = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 50 };
 
@@ -113,7 +115,7 @@ export function writeFixtures(HOME) {
     J(cl('feat-1', 5, { type: 'user', isMeta: true, message: { role: 'user', content: [{ type: 'text', text: 'Base directory for this skill: /Users/x/.claude/plugins/cache/market/used-plugin/1.0.0/skills/gamma\n' + 'g'.repeat(3996) }] } })),
     J(tool('feat-1', 6, 'mcp__busy-srv__fetch', { url: 'a' })),
     J(tool('feat-1', 7, 'mcp__busy-srv__fetch', { url: 'b' })),
-    J(cl('feat-1', 7, { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu7', is_error: true, content: 'Request timed out after 30s' }] } })),
+    J(cl('feat-1', 7, { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'feat-1-tu7', is_error: true, content: 'Request timed out after 30s' }] } })),
   ].join('\n') + '\n');
   for (const sid of ['rev-1', 'dbg-1', 'feat-1']) fs.appendFileSync(path.join(HOME, '.claude/projects/-Users-x-workspace-rev', `${sid}.jsonl`), [
     J(cl(sid, 0, { type: 'attachment', attachment: { type: 'hook_success', hookName: 'SessionStart:startup', hookEvent: 'SessionStart', command: '/Users/x/bin/intro.sh', durationMs: 1200, exitCode: 0 } })),
@@ -178,6 +180,7 @@ export function writeDemo(home) {
   const put = (rel, text) => { const p = path.join(home, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
   const plan = ARCHETYPES.flatMap((a) => Array.from({ length: a.n }, (_, i) => [a, i])).sort(() => r() - 0.5);
   const now = Date.now();
+  const q = prng(11); // a second stream for the extras below, so adding them leaves the rest of the demo unchanged
   plan.forEach(([a, i], k) => {
     const sid = `demo-${String(k).padStart(2, '0')}`;
     let t = now - (plan.length - k) * 2.5 * 864e5 + Math.floor(9 + r() * 10) * 3600e3;
@@ -207,6 +210,14 @@ export function writeDemo(home) {
       if (j === 1 && r() < 0.35) lines.push(J(base({ type: 'user', timestamp: at(), promptSource: 'typed', message: { role: 'user', content: 'continue' } })));
       if (j === 2 && r() < 0.2) lines.push(J(base({ type: 'user', timestamp: at(), promptSource: 'typed', message: { role: 'user', content: 'no, reuse the existing helper instead' } })));
     });
+    // extras: a fix loop on one file, an interruption, and a call that never got its result
+    const tick = () => new Date((t += 30000)).toISOString();
+    const call = (name, input, id) => J(base({ type: 'assistant', timestamp: tick(), message: { model: 'claude-opus-5-5', role: 'assistant', usage: { input_tokens: 200, output_tokens: 200, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'tool_use', id, name, input }] } }));
+    const done = (id, out, isErr) => J(base({ type: 'user', timestamp: tick(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: !!isErr, content: out }] } }));
+    if (a.task === 'debug' && q() < 0.5) for (let x = 0; x < 3; x++) lines.push(call('Edit', { file_path: '/home/dev/app/src/checkout.ts' }, `${sid}-loop${x}`), done(`${sid}-loop${x}`, 'ok'));
+    if (q() < 0.3) lines.push(call('Bash', { command: 'npm run dev' }, `${sid}-int`), done(`${sid}-int`, "The user doesn't want to proceed with this tool use. The tool use was rejected.", true),
+      J(base({ type: 'user', timestamp: tick(), message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } })));
+    if (k % 12 === 5) lines.push(call('Bash', { command: 'npm run build' }, `${sid}-lost`)); // the session was killed mid-call
     lines.push(J(base({ type: 'assistant', timestamp: at(), message: { model: 'claude-opus-5-5', role: 'assistant', usage: { input_tokens: 300, output_tokens: 600, cache_read_input_tokens: ctx, cache_creation_input_tokens: 0 }, content: [{ type: 'text', text: 'Done.' }] } })));
     lines.push(J({ type: 'ai-title', sessionId: sid, aiTitle: a.title(i) }));
     lines.push(J({ type: 'cost-state', sessionId: sid, totalCostUSD: +(0.4 + r() * 5).toFixed(2), modelUsage: {} }));

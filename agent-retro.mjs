@@ -645,6 +645,16 @@ function renderText(a, hist, o) {
     rank(a.toolErrors.byTool, a.toolErrors.total, 6);
   }
 
+  const ed = a.editing;
+  if (ed && (ed.edits || ed.interruptions)) {
+    sec('HOW THE AGENT EDITS');
+    row('Reads per edit', ed.readsPerEdit ?? '—');
+    row('Edits without a read', ed.edits ? `${ed.blind} of ${ed.edits} (${Math.round(ed.blindShare * 100)}%)` : '—');
+    row('Files patched 5+ times', `${ed.reworkedFiles} (in ${ed.reworkSessions} of ${ed.editSessions} sessions with edits)`);
+    row('Full rewrites', ed.rewrites);
+    row('Interruptions', `${ed.interruptions} in ${ed.interruptedSessions} sessions`);
+    if (ed.interruptions) rank(ed.interruptedAfter, ed.interruptions, 5);
+  }
   if ((a.workflows || []).length) {
     sec('REPEATED COMMAND SEQUENCES');
     for (const w of a.workflows) L.push(`  ${String(w.sessions).padStart(3)} sessions  ${w.steps.join(' → ')}`);

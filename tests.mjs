@@ -623,6 +623,55 @@ test('cli: --cycle-start/--save-cycle set a cycle, --save-cycle alone goes back 
   assert.match(run('--retro', '--period', '2026-03-01').stdout, /MONTHLY REVIEW · March 2026/);
 });
 
+test('editing: blind edits, rewrites, rework and what you interrupted, per thread', () => {
+  const T = 1e12; let n = 0;
+  const ev = (role, extra) => ({ agent: 'x', sessionId: 'e', ts: T + n++ * 1000, role, ...extra });
+  const tool = (toolName, detail, extra) => ev('tool', { toolName, detail, ...extra });
+  const [s] = buildSessions([
+    ev('user', { text: 'fix the checkout total in the cart page' }),
+    tool('Read', '/app/src/a.ts'), tool('Edit', '/app/src/a.ts'), // read first
+    tool('Edit', '/app/src/b.ts'), // blind
+    tool('Bash', 'cat src/c.ts | head'), tool('Edit', '/app/src/c.ts'), // read by the shell
+    tool('Write', '/app/src/new.ts'), // creates a file: not blind
+    tool('Write', '/app/src/a.ts'), // overwrites a file it had read: a rewrite
+    ...Array.from({ length: 4 }, () => tool('Edit', '/app/src/b.ts')), // b.ts now edited 5 times
+    tool('Edit', '/app/src/d.ts', { sidechain: 'sub1' }), tool('Read', '/app/src/d.ts'), // the subagent never read d.ts
+    tool('Bash', 'npm run dev'), ev('interrupt'),
+    ev('user', { text: 'now update the docs for the cart page please' }), ev('interrupt'),
+  ]);
+  assert.deepEqual(s.editing, { edits: 8, blind: 2, rewrites: 1, reworkedFiles: 1 });
+  assert.deepEqual(s.interruptedAfter, { Bash: 1, '(reply)': 1 });
+});
+
+test('unfinished: a call with no result counts as a failure, unless it may still be running', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-orphans-'));
+  const at = (ms) => new Date(ms).toISOString();
+  const old = Date.now() - 3 * 3600e3, recent = Date.now() - 60e3;
+  const call = (id, ts, sid) => JSON.stringify({ type: 'assistant', sessionId: sid, uuid: id, timestamp: at(ts), message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'npm run build' } }] } });
+  const result = (id, ts, sid) => JSON.stringify({ type: 'user', sessionId: sid, uuid: id + 'r', timestamp: at(ts), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] } });
+  fs.mkdirSync(path.join(dir, 'p'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'p', 's1.jsonl'), [call('a', old, 's1'), result('a', old + 1000, 's1'), call('b', old + 2000, 's1')].join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'p', 's2.jsonl'), [call('c', old, 's2')].join('\n') + '\n'); // its result arrives in the resumed file
+  fs.writeFileSync(path.join(dir, 'p', 's3.jsonl'), [result('c', old + 5000, 's2'), call('d', recent, 's3')].join('\n') + '\n');
+  const { events } = await collectClaude({ dirs: [dir] });
+  const lost = events.filter((e) => e.unfinished);
+  assert.deepEqual(lost.map((e) => [e.sessionId, e.toolName]), [['s1', 'Bash']], 'b is lost; c finished in another file; d may still run');
+  const [s] = buildSessions(events).filter((x) => x.id === 's1');
+  assert.deepEqual([s.tools.errors, s.tools.errorsByClass.unfinished], [1, 1]);
+});
+
+test('recommend: blind edits and edit loops', async () => {
+  const { RULES } = await import('./recommend.mjs');
+  const rules = RULES.filter((r) => ['blindEdits', 'editLoops'].includes(r.name));
+  const mk = (edits, blind, reworkedFiles) => ({ editing: { edits, blind, rewrites: 0, reworkedFiles } });
+  const ids = (S) => rules.map((r) => r({ sessions: S })).filter(Boolean).map((r) => r.id);
+  const careful = Array.from({ length: 6 }, () => mk(5, 0, 0));
+  assert.ok(!ids(careful).includes('blind-edits') && !ids(careful).includes('edit-loops'));
+  const sloppy = Array.from({ length: 6 }, (_, i) => mk(5, 2, i < 2 ? 1 : 0));
+  assert.ok(ids(sloppy).includes('blind-edits'));
+  assert.ok(ids(sloppy).includes('edit-loops'), '2 of 6 sessions looped on a file');
+});
+
 // --- regressions from the code review ------------------------------------------
 test('review: redaction covers JSON and quoted keys', async () => {
   const { redact } = await import('./telemetry.mjs');

@@ -175,8 +175,16 @@ the export.
   as away, so a session resumed days later does not inflate either.
 - **Why tools fail.** Each failed call is classified from its error message: wrong arguments or
   order, timeout, command exited with an error, target no longer there, environment (ports, missing
-  tools), service unavailable, file permission, file changed since read. Calls you declined and
+  tools), service unavailable, file permission, file changed since read. A call that never got a
+  result counts as *never finished*: the session crashed, was killed or lost it (calls under 10
+  minutes old are left alone, since their session may still be running). Calls you declined and
   calls a guard blocked are counted separately and are not failures.
+- **How the agent edits.** Reads per edit; edits to a file the agent had not read in that
+  conversation (by a read tool or a shell command), which are the ones that break code; files
+  patched 5 or more times in one session, a sign the approach is wrong; and full rewrites of a file
+  it had read. The main conversation and each subagent are tracked separately.
+- **When you stop it.** Your interruptions (Esc) per session, by the last tool the agent ran before
+  you stopped it.
 - **Repeated command sequences.** Runs of 3–5 shell commands that recur in 3 or more sessions.
   They are candidates for a script or a saved command. Runs that only look around (grep, cat, ls)
   are skipped.
@@ -206,6 +214,8 @@ file. Nothing is ever applied for you.
 | Check-ins | 12% or more of your prompts are "yes" or "continue" | CLAUDE.md line: finish an approved plan without pausing |
 | Repeated prompts | A prompt of 15+ characters typed 3 or more times | `~/.claude/commands/<name>.md` |
 | Failing tools | A tool or MCP server fails ≥ 8% of 10+ calls | CLAUDE.md line for its most common failure |
+| Edits without a read | 10% or more of 20+ edits change a file the agent had not read | CLAUDE.md line: read before editing, re-read after a failed edit |
+| Edit loops | In 20% or more of sessions with edits, one file is edited 5+ times | CLAUDE.md line: after a third fix to one file, stop and propose another approach |
 | Repeated sequence | A command sequence recurs in 3+ sessions | `~/.claude/commands/<name>.md` running the steps |
 | Task playbooks | A task with 3+ sessions skips good practices in more than half of them (e.g. code review without `gh pr diff`, debugging without reproducing first) | `~/.claude/commands/<task>.md`: a workflow for that task, plus suggested tools |
 | Heavy hooks | A hook injects 1k+ tokens per session or runs over 1 s at p90 | Trim or scope it |
@@ -291,8 +301,8 @@ period.
 - **Review.** The period card, Went well / Didn't go well / Change, Do next and Did it work?,
   then every recommendation with its fix and the metrics compared with the month before.
 - **Work.** Tasks with per-session medians (select one to list its sessions, or open its
-  playbook), how sessions go, and what the agent does: tools, why they fail, shell commands and
-  repeated sequences.
+  playbook), how sessions go, and what the agent does: tools, why they fail, how it edits, when
+  you stop it, shell commands and repeated sequences.
 - **Cost.** Spend, cache and context size; what fills the context (estimated); tokens per day.
 - **Setup.** Plugins, skills, MCP servers, hooks, subagents and slash commands, loaded versus used;
   and risk: secret access, destructive commands, error bursts.

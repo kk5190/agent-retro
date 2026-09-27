@@ -25,7 +25,7 @@ const SORTS = ['recent', 'cost', 'turns', 'duration', 'tools'];
 export const TOOLS = [
   {
     name: 'get_overview',
-    description: 'Summary of coding-agent usage: volume, per-task profile (sessions, turns, cost, error and correction rates, top tools/commands/skills), tokens, cost, estimated context sources (what fills the window), compactions, subagent types, risk signals, why tool calls fail, working vs waiting time, repeated command sequences, a before/after trend (the reviewed month vs the month before), and top tools, skills and MCP servers.',
+    description: 'Summary of coding-agent usage: volume, per-task profile (sessions, turns, cost, error and correction rates, top tools/commands/skills), tokens, cost, estimated context sources (what fills the window), compactions, subagent types, risk signals, why tool calls fail, working vs waiting time, repeated command sequences, edit habits (edits without a read first, files patched 5+ times, what you interrupted), a before/after trend (the reviewed month vs the month before), and top tools, skills and MCP servers.',
     inputSchema: { type: 'object', properties: { ...FILTERS } },
   },
   {

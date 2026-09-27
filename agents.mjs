@@ -555,6 +555,7 @@ export async function collectClaude(o = {}) {
   for (const r of roots) walkFiles(r, (n) => n.endsWith('.jsonl'), files, 200000);
   const events = [];
   const seen = new Set(); // resumed/forked sessions copy earlier records into a new file
+  const pending = new Map(); // tool_use id -> the call, until its result arrives (possibly in a resumed file)
   let parseErrors = 0;
   for (const file of files) {
     const project = claudeProject(file, roots);
@@ -582,7 +583,8 @@ export async function collectClaude(o = {}) {
         else if (Array.isArray(content)) {
           for (const b of content) {
             if (!b || b.type !== 'tool_result') continue;
-            const tool = toolNames.get(b.tool_use_id) || 'tool';
+            const tool = toolNames.get(b.tool_use_id) || (pending.get(b.tool_use_id) || {}).toolName || 'tool';
+            pending.delete(b.tool_use_id);
             ctx('toolOutput', b.content, { tool });
             if (b.is_error) events.push({ ...base, role: 'tool_error', toolName: tool, text: firstText(b.content) });
           }
@@ -614,7 +616,7 @@ export async function collectClaude(o = {}) {
           if (b.type === 'thinking') { ctx('reasoning', b.thinking); continue; }
           if (b.type === 'text') { ctx('assistantText', b.text); continue; }
           if (b.type !== 'tool_use') continue;
-          if (b.id) toolNames.set(b.id, b.name);
+          if (b.id) { toolNames.set(b.id, b.name); pending.set(b.id, { ...base, toolName: b.name }); }
           ctx('toolInput', b.input);
           events.push({ ...base, role: 'tool', toolName: b.name, detail: toolDetail(b.input) });
           if (b.name === 'Skill' && b.input && b.input.skill) events.push({ ...base, role: 'skill', text: b.input.skill, via: 'tool' });
@@ -639,6 +641,10 @@ export async function collectClaude(o = {}) {
       }
     }
   }
+  // Calls that never got a result: the session crashed, was killed or lost them. Recent ones may
+  // belong to a session that is still running, so they wait for the next read.
+  const settled = Date.now() - 10 * 60000;
+  for (const call of pending.values()) if (call.ts && call.ts < settled) events.push({ ...call, role: 'tool_error', unfinished: true, text: null });
   return { events, files, parseErrors };
 }
 

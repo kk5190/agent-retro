@@ -61,13 +61,15 @@ const ERROR_CLASSES = [
   ['permission', /eperm|eacces|permission denied|not permitted/i],
   ['command-failed', /^\s*exit code [1-9]/i],
 ];
-export const ERROR_CLASS_IDS = [...ERROR_CLASSES.map(([c]) => c), 'other', 'unknown'];
+/** `unfinished`: a call that never got a result (the session crashed, was killed or lost it). */
+export const ERROR_CLASS_IDS = [...ERROR_CLASSES.map(([c]) => c), 'unfinished', 'other', 'unknown'];
 export function errorClass(text) {
   if (!text) return 'unknown';
   for (const [c, re] of ERROR_CLASSES) if (re.test(text)) return c;
   return 'other';
 }
 const NOT_FAILURES = new Set(['rejected', 'blocked']);
+const REWORK_EDITS = 5; // one file edited this many times in a session is going in circles
 const AWAY_MS = 30 * 60000; // a gap longer than this before your next prompt counts as away, not waiting
 
 export const CONTEXT_SOURCES = ['system', 'memory', 'toolDefs', 'skills', 'hooks', 'reminders', 'userText', 'files', 'toolInput', 'toolOutput', 'reasoning', 'assistantText'];
@@ -166,6 +168,8 @@ function newSession(e) {
     tools: { total: 0, errors: 0, rejected: 0, blocked: 0, errorsByTool: {}, errorsByClass: {}, byName: {}, buckets: {}, shell: {} },
     time: { agentMinutes: 0, waitMinutes: 0, awayMinutes: 0, medianResponseSec: null },
     files: { edited: 0, read: 0, testEdits: 0, docEdits: 0 },
+    editing: { edits: 0, blind: 0, rewrites: 0, reworkedFiles: 0 },
+    interruptedAfter: {},
     skills: {}, mcpServers: {}, commands: {},
     subagents: { runs: 0, toolCalls: 0, types: {}, byType: {} },
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
@@ -177,6 +181,7 @@ function newSession(e) {
     _usageCost: 0, _claudeCost: null, _cum: null, _editsSinceTest: 0, _seenTest: false,
     _ctxMax: {}, _turnErrors: 0, _subRuns: new Map(), _loaded: { skill: {}, mcp: {} },
     _skillUse: {}, _hooks: {}, _toolErrClass: {}, _toolSeq: 0, _firstEdit: null, _firstRun: null,
+    _known: {}, _editsByFile: {}, _lastTool: null,
     _shellHeads: [], _turnStart: null, _lastAgent: null, _agentMs: 0, _waitMs: 0, _awayMs: 0, _responses: [],
   };
 }
@@ -187,7 +192,7 @@ function addTool(s, e) {
   const name = e.toolName || 'tool';
   const bucket = toolBucket(name);
   if (!e.sidechain) { // order of the main thread's first run and first edit (did it reproduce before changing code?)
-    s._toolSeq++;
+    s._toolSeq++; s._lastTool = name;
     if (bucket === 'shell' && s._firstRun == null) s._firstRun = s._toolSeq;
     if (bucket === 'edit' && s._firstEdit == null) s._firstEdit = s._toolSeq;
   }
@@ -216,6 +221,28 @@ function addTool(s, e) {
     s._edited.add(d); s._editsSinceTest++;
   } else if (bucket === 'read' && d && !/[*?]/.test(d)) {
     s._read.add(d);
+  }
+  trackEdit(s, e, name, bucket, d);
+}
+
+/**
+ * Edit habits, per thread (the main conversation and each subagent see different files):
+ * an edit to a file the thread never read (by a read tool or a shell command) is blind; a full
+ * write over a file it had read or edited is a rewrite; a file edited REWORK_EDITS+ times is rework.
+ */
+const PATHLIKE = /^[^\s]+$/;
+const pathTokens = (cmd) => String(cmd).split(/[\s'"`|;&<>()=]+/).filter((t) => /[/.]/.test(t) && /\w/.test(t)).map((t) => t.replace(/^\.\//, ''));
+function trackEdit(s, e, name, bucket, d) {
+  if (!d) return;
+  const known = (s._known[e.sidechain || 'main'] = s._known[e.sidechain || 'main'] || new Set());
+  const seen = (p) => known.has(p) || [...known].some((k) => p.endsWith('/' + k));
+  if (bucket === 'read' && PATHLIKE.test(d)) known.add(d);
+  else if (bucket === 'shell') for (const t of pathTokens(d)) known.add(t);
+  else if (bucket === 'edit' && PATHLIKE.test(d) && /[/.]/.test(d)) {
+    const write = /^(write|create_?file)$/i.test(name);
+    if (write) { if (seen(d)) s.editing.rewrites++; } // a write to a new file creates it; that is not blind
+    else { s.editing.edits++; if (!seen(d)) s.editing.blind++; }
+    known.add(d); inc(s._editsByFile, d);
   }
 }
 
@@ -280,7 +307,7 @@ export function buildSessions(events, o = {}) {
         if (e.sidechain) { const c = classify(e.text); if (c) s._subPrompts.push(c.text); break; }
         if (e.src && !o.allSources && !HUMAN_SRC.includes(e.src)) break;
         const c = classify(e.text); if (!c) break;
-        s.turns.human++; s._prompts.push(c.text); s._turnErrors = 0;
+        s.turns.human++; s._prompts.push(c.text); s._turnErrors = 0; s._lastTool = null;
         if (e.ts) startTurn(s, e.ts);
         if (c.text.length < 40 && ACK.test(c.text.trim())) s.turns.ack++;
         if (PUSHBACK.test(c.text.trim())) s.turns.pushback++;
@@ -289,13 +316,13 @@ export function buildSessions(events, o = {}) {
       case 'assistant': if (!e.sidechain) s.turns.assistant++; inc(s.models, e.model); break;
       case 'tool': addTool(s, e); break;
       case 'tool_error': {
-        const cls = errorClass(e.text);
+        const cls = e.unfinished ? 'unfinished' : errorClass(e.text);
         if (NOT_FAILURES.has(cls)) { s.tools[cls]++; break; }
         s.tools.errors++;
         inc(s.tools.errorsByClass, cls); inc(s.tools.errorsByTool, e.toolName || 'tool');
         inc((s._toolErrClass[e.toolName || 'tool'] = s._toolErrClass[e.toolName || 'tool'] || {}), cls);
         if (e.sidechain) sub(s, e).errors++;
-        s.risk.maxErrorsPerTurn = Math.max(s.risk.maxErrorsPerTurn, ++s._turnErrors);
+        if (!e.unfinished) s.risk.maxErrorsPerTurn = Math.max(s.risk.maxErrorsPerTurn, ++s._turnErrors); // found after the fact, not in its turn
         break;
       }
       case 'ctx': {
@@ -323,7 +350,7 @@ export function buildSessions(events, o = {}) {
         break;
       }
       case 'command': inc(s.commands, e.text); break;
-      case 'interrupt': s.turns.interruptions++; break;
+      case 'interrupt': s.turns.interruptions++; inc(s.interruptedAfter, s._lastTool || '(reply)'); break;
       case 'title': if (e.custom || !s.title) s.title = e.text; break;
       default: break;
     }
@@ -349,6 +376,7 @@ function finalize(s) {
   s.costUsd = +((s._claudeCost != null ? s._claudeCost : s._usageCost) || 0).toFixed(4);
   s.durationMin = s.start && s.end ? Math.round((s.end - s.start) / 60000) : null;
   s.files.edited = s._edited.size; s.files.read = s._read.size;
+  s.editing.reworkedFiles = Object.values(s._editsByFile).filter((n) => n >= REWORK_EDITS).length;
   for (const f of s._edited) { if (TEST_FILE.test(f)) s.files.testEdits++; if (DOC_FILE.test(f)) s.files.docEdits++; }
   const h = s.turns.human;
   s.signals.toolErrorRate = s.tools.total ? +(s.tools.errors / s.tools.total).toFixed(3) : 0;
@@ -372,7 +400,7 @@ function finalize(s) {
   s.skills = Object.fromEntries(Object.entries(uses).map(([k, u]) => [k, Math.max(u.tool, u.load)]));
   s.task = labelTask(s);
   delete s._turnStart; delete s._lastAgent; delete s._agentMs; delete s._waitMs; delete s._awayMs; delete s._responses;
-  delete s._ctxMax; delete s._turnErrors; delete s._subRuns; // _loaded stays (internal) for the inventory
+  delete s._ctxMax; delete s._turnErrors; delete s._subRuns; delete s._known; delete s._editsByFile; delete s._lastTool; // _loaded stays (internal) for the inventory
   delete s._cum; delete s._editsSinceTest; delete s._seenTest; delete s._usageCost; delete s._claudeCost;
 }
 
@@ -517,6 +545,8 @@ export const TREND_METRICS = {
   ackRate: { label: '“Continue” prompts', lowerIsBetter: true, share: true, of: (S) => ratio(S, (s) => s.turns.ack, (s) => s.turns.human) },
   correctionRate: { label: 'Corrections', lowerIsBetter: true, share: true, of: (S) => ratio(S, (s) => s.turns.pushback, (s) => s.turns.human) },
   toolErrorRate: { label: 'Failed tool calls', lowerIsBetter: true, share: true, of: (S) => ratio(S, (s) => s.tools.errors, (s) => s.tools.total) },
+  blindEditShare: { label: 'Edits without a read first', lowerIsBetter: true, share: true, of: (S) => ratio(S, (s) => s.editing.blind, (s) => s.editing.edits) },
+  interruptsPerSession: { label: 'Interruptions per session', lowerIsBetter: true, of: (S) => avg(S, (s) => s.turns.interruptions) },
   sensitivePerSession: { label: 'Secret/key touches per session', lowerIsBetter: true, of: (S) => avg(S, (s) => s.risk.sensitiveAccess) },
 };
 function sumOf(m, keep = () => true) { let n = 0; for (const [k, v] of Object.entries(m || {})) if (keep(k)) n += v; return n; }
@@ -737,7 +767,25 @@ export function summarizeSessions(sessions) {
     toolErrors: { ...errors, byClass: Object.fromEntries(topN(errors.byClass, 12)), byTool: Object.fromEntries(topN(errors.byTool, 12)) },
     time: { agentMinutes: time.agentMinutes, waitMinutes: time.waitMinutes, awayMinutes: time.awayMinutes, medianResponseSec: median(time.responses) || null },
     workflows: mineWorkflows(sessions),
+    editing: summarizeEditing(sessions),
   };
+}
+
+/** How the agent edits, and when you stop it: totals across sessions. */
+function summarizeEditing(sessions) {
+  const e = { edits: 0, blind: 0, rewrites: 0, reworkedFiles: 0, reworkSessions: 0, editSessions: 0, reads: 0, interruptions: 0, interruptedSessions: 0, interruptedAfter: {} };
+  for (const s of sessions) {
+    e.edits += s.editing.edits; e.blind += s.editing.blind; e.rewrites += s.editing.rewrites; e.reworkedFiles += s.editing.reworkedFiles;
+    if (s.editing.edits) e.editSessions++;
+    if (s.editing.reworkedFiles) e.reworkSessions++;
+    e.reads += s.tools.buckets.read || 0;
+    e.interruptions += s.turns.interruptions; if (s.turns.interruptions) e.interruptedSessions++;
+    for (const [k, v] of Object.entries(s.interruptedAfter)) inc(e.interruptedAfter, k, v);
+  }
+  e.readsPerEdit = e.edits ? +(e.reads / e.edits).toFixed(1) : null;
+  e.blindShare = e.edits ? +(e.blind / e.edits).toFixed(3) : null;
+  e.interruptedAfter = Object.fromEntries(topN(e.interruptedAfter, 8));
+  return e;
 }
 
 export function summarizeTasks(sessions) {
