@@ -141,12 +141,22 @@
   .chart .raw { fill: none; stroke: var(--ink-3); stroke-width: 1.25; opacity: .6; stroke-linejoin: round; }
   .chart .ma { fill: none; stroke: var(--signal); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .chart .wash { fill: var(--signal); opacity: .1; }
+  .chart .col { fill: var(--signal); opacity: .42; }
+  .chart .col.on { opacity: .8; }
+  #calendar svg { width: auto; max-width: 100%; }
+  .chart .cal { fill: var(--heat-0); }
+  .chart .cal:hover, .chart .pc:hover { stroke: var(--ink); stroke-width: 1.5; }
+  .chart .pc { fill: var(--signal); fill-opacity: .82; }
+  .chart .pc.peak { fill: var(--alert); }
+  .chart .rowline { stroke: var(--grid); stroke-width: 1; }
+  .chart text.lab { font-size: 10.5px; }
   .chart .cross { stroke: var(--ink-3); stroke-width: 1; }
   .chart .dot { fill: var(--signal); stroke: var(--surface); stroke-width: 2; }
   .chart .end { fill: var(--ink-2); font-weight: 600; }
   .lkeys { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin: -4px 0 10px; }
   .lkeys i { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--signal); vertical-align: middle; margin-right: 6px; }
   .lkeys i.raw { border-top: 1.25px solid var(--ink-3); opacity: .8; }
+  .lkeys i.colkey { width: 8px; height: 10px; border: 0; background: var(--signal); opacity: .35; border-radius: 2px 2px 0 0; vertical-align: -1px; }
 
   /* shared tooltip — values lead, labels follow */
   #tip { position: fixed; z-index: 50; pointer-events: none; min-width: 140px; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--rule); box-shadow: 0 8px 24px rgb(0 0 0 / .14); font-size: 12px; color: var(--ink-2); opacity: 0; transition: opacity .1s; }
@@ -440,8 +450,8 @@
       </div>
       <div class="panel gap">
         <h3>Tokens per day</h3>
-        <p class="hint">All tokens the agent processed each day. Hover or use the arrow keys to read a day.</p>
-        <div class="lkeys"><span><i class="raw"></i>Daily</span><span><i></i>7-day average</span></div>
+        <p class="hint">All tokens the agent processed each day, with the 7-day average. Hover or use the arrow keys to read a day.</p>
+        <div class="lkeys"><span><i class="colkey"></i>Each day</span><span><i></i>7-day average</span></div>
         <div class="chart" id="tokTrend"></div>
         <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="tokTable"></table></div></details>
       </div>
@@ -512,21 +522,21 @@
     <section id="rhythm" class="part">
       <header>
         <h2>When do you work?</h2>
-        <p>When you send prompts, by weekday and hour, and how activity changed over time.</p>
+        <p>Every day you sent prompts, and the hours of the week you usually do it. Hover any square or circle for its count.</p>
       </header>
-      <div class="panel">
-        <h3>Weekday × hour</h3>
-        <p class="hint" id="rhythmHint">Stronger colour means more prompts.</p>
-        <div class="hm" id="heatmap" role="img" aria-label="Prompts by weekday and hour"></div>
-        <div class="scale" id="hmScale"></div>
-        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="hmTable"></table></div></details>
+      <div class="kpis" id="rhythmKpis"></div>
+      <div class="panel scroll">
+        <h3>Activity calendar</h3>
+        <p class="hint">One square per day; darker means more prompts.</p>
+        <div class="chart" id="calendar"></div>
+        <div class="scale" id="calScale"></div>
+        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="trendTbl"></table></div></details>
       </div>
       <div class="panel gap">
-        <h3>Prompts per day</h3>
-        <p class="hint">Your prompts each day. Hover or use the arrow keys to read a day.</p>
-        <div class="lkeys"><span><i class="raw"></i>Daily</span><span><i></i>7-day average</span></div>
-        <div class="chart" id="trend"></div>
-        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="trendTbl"></table></div></details>
+        <h3>Your week, hour by hour</h3>
+        <p class="hint" id="rhythmHint">Bigger circles mean more prompts in that hour.</p>
+        <div class="chart" id="punch"></div>
+        <details class="tv"><summary>Show as table</summary><div class="tv-scroll"><table id="hmTable"></table></div></details>
       </div>
     </section>
 
@@ -659,7 +669,7 @@ addEventListener('scroll', hideTip, { passive: true });
 function niceMax(v) {
   if (!(v > 0)) return 1;
   const p = 10 ** Math.floor(Math.log10(v)); const n = v / p;
-  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  return ([1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((x) => n <= x) || 10) * p;
 }
 const dateShort = (d) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
@@ -668,24 +678,45 @@ const dateShort = (d) => new Date(d + 'T00:00:00').toLocaleDateString(undefined,
  * stretches). Crosshair + tooltip on hover; arrow keys move it when the chart has focus.
  */
 const charts = new Map();
-function lineChart(id, series, valueOf, fmtV, what) {
+/** Fill the days between the first and last entry with zeros, so the x axis is real time. */
+function densify(series) {
+  if (!series || series.length < 2) return series || [];
+  const byDate = new Map(series.map((d) => [d.date, d]));
+  const out = [];
+  const end = new Date(series[series.length - 1].date + 'T00:00:00');
+  for (let t = new Date(series[0].date + 'T00:00:00'); t <= end; t.setDate(t.getDate() + 1)) {
+    const k = t.toLocaleDateString('en-CA');
+    out.push(byDate.get(k) || { date: k, n: 0 });
+  }
+  return out;
+}
+
+/**
+ * Daily values as columns with their 7-day average as a line, drawn at the container's real
+ * pixel size. Crosshair + tooltip on hover; arrow keys move it when the chart has focus.
+ */
+function lineChart(id, raw, valueOf, fmtV, what) {
   const el = $(id);
+  const series = densify(raw);
   const draw = () => {
-    if (!series || series.length < 2) { el.innerHTML = '<p class="empty">Not enough days in this period to draw a trend.</p>'; return; }
-    const n = series.length, W = Math.max(280, el.clientWidth), H = 200, L = 48, R = 58, T = 10, B = 26;
+    if (series.length < 2) { el.innerHTML = '<p class="empty">Not enough days in this period to draw a trend.</p>'; return; }
+    const n = series.length, W = Math.max(280, el.clientWidth), H = 210, L = 48, R = 58, T = 10, B = 26;
     const vals = series.map(valueOf);
     const avg = vals.map((_, i) => { const w = vals.slice(Math.max(0, i - 6), i + 1); return w.reduce((s, z) => s + z, 0) / w.length; });
     const top = niceMax(Math.max(...vals));
-    const x = (i) => L + (i / (n - 1)) * (W - L - R);
+    const step = (W - L - R) / n;
+    const bw = Math.max(1, Math.min(14, step - 2));
+    const x = (i) => L + step * (i + 0.5);
     const y = (v) => T + (1 - v / top) * (H - T - B);
     const path = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
     const xl = [...new Set([0, Math.round((n - 1) / 2), n - 1])];
+    const r = Math.min(3, bw / 2);
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" tabindex="0" role="img" aria-label="${esc(what)} per day, ${esc(dateStr(series[0].date))} to ${esc(dateStr(series[n - 1].date))}. Use arrow keys to read days.">
       ${[0, top / 2, top].map((t) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${esc(fmtV(t).replace(/\.0(?=[kMB]?$)/, ''))}</text>`).join('')}
-      <path class="wash" d="${path(avg)}L${x(n - 1)},${y(0)}L${x(0)},${y(0)}Z"/>
-      <path class="raw" d="${path(vals)}"/><path class="ma" d="${path(avg)}"/>
+      ${vals.map((v, i) => (v ? `<path class="col" data-i="${i}" d="M${(x(i) - bw / 2).toFixed(1)},${y(0)}V${(y(v) + r).toFixed(1)}q0,-${r} ${r},-${r}h${(bw - 2 * r).toFixed(1)}q${r},0 ${r},${r}V${y(0)}Z"/>` : '')).join('')}
+      <path class="ma" d="${path(avg)}"/>
       <circle class="dot" cx="${x(n - 1)}" cy="${y(avg[n - 1])}" r="4"/>
-      <text class="end" x="${x(n - 1) + 9}" y="${y(avg[n - 1]) + 4}">${esc(fmtV(avg[n - 1]))}</text>
+      <text class="end" x="${x(n - 1) + 9}" y="${y(avg[n - 1]) + 4}">${esc(fmtV(Math.round(avg[n - 1])))}</text>
       ${xl.map((i) => `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${esc(dateShort(series[i].date))}</text>`).join('')}
       <g class="hover" style="display:none"><line class="cross" y1="${T}" y2="${H - B}"/><circle class="dot" r="4"/></g>
     </svg>`;
@@ -693,14 +724,16 @@ function lineChart(id, series, valueOf, fmtV, what) {
     let idx = null;
     const show = (i, px, py) => {
       idx = i; g.style.display = '';
+      svg.querySelectorAll('.col.on').forEach((c) => c.classList.remove('on'));
+      const col = svg.querySelector(`.col[data-i="${i}"]`); if (col) col.classList.add('on');
       line.setAttribute('x1', x(i)); line.setAttribute('x2', x(i)); dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(avg[i]));
-      const r = svg.getBoundingClientRect(), k = r.width / W;
-      showTip(px ?? r.left + x(i) * k, py ?? r.top + y(avg[i]) * k, dateStr(series[i].date), [[fmtV(vals[i]), ' that day', 'raw'], [fmtV(Math.round(avg[i])), ' 7-day average', 'ma']]);
+      const rc = svg.getBoundingClientRect(), k = rc.width / W;
+      showTip(px ?? rc.left + x(i) * k, py ?? rc.top + y(avg[i]) * k, dateStr(series[i].date), [[fmtV(vals[i]), ' that day', 'raw'], [fmtV(Math.round(avg[i])), ' 7-day average', 'ma']]);
     };
-    const hide = () => { g.style.display = 'none'; hideTip(); };
+    const hide = () => { g.style.display = 'none'; svg.querySelectorAll('.col.on').forEach((c) => c.classList.remove('on')); hideTip(); };
     svg.addEventListener('pointermove', (e) => {
-      const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) * (W / r.width);
-      show(Math.max(0, Math.min(n - 1, Math.round(((px - L) / (W - L - R)) * (n - 1)))), e.clientX, e.clientY);
+      const rc = svg.getBoundingClientRect(); const px = (e.clientX - rc.left) * (W / rc.width);
+      show(Math.max(0, Math.min(n - 1, Math.floor((px - L) / step))), e.clientX, e.clientY);
     });
     svg.addEventListener('pointerleave', hide); svg.addEventListener('blur', hide);
     svg.addEventListener('keydown', (e) => {
@@ -999,28 +1032,119 @@ function renderRisk(a) {
 
 /* ---- rhythm ---- */
 const heat = (v, max) => (v ? `color-mix(in srgb, var(--signal) ${Math.round(18 + 82 * (v / max))}%, var(--heat-0))` : 'var(--heat-0)');
-function renderRhythm(a) {
-  const hm = a.cadence.heatmap; const max = Math.max(1, ...hm.flat());
-  let html = '<div></div>';
-  for (let h = 0; h < 24; h++) html += `<div class="hc">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</div>`;
-  for (let d = 0; d < 7; d++) {
-    html += `<div class="hl">${DOW[d]}</div>`;
-    for (let h = 0; h < 24; h++) html += `<div class="cell" data-d="${d}" data-h="${h}" style="background:${heat(hm[d][h], max)}"></div>`;
-  }
-  $('heatmap').innerHTML = html;
-  $('heatmap').onpointermove = (e) => {
-    const c = e.target.closest('.cell'); if (!c) return hideTip();
-    const d = Number(c.dataset.d), h = Number(c.dataset.h);
-    showTip(e.clientX, e.clientY, `${DOW[d]} ${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`, [[fmt(hm[d][h]), ' prompts']]);
+const DAYMS = 864e5;
+const localKey = (t) => new Date(t).toLocaleDateString('en-CA');
+
+/** Longest run of consecutive active days, and the run ending on the last active day (if that was today or yesterday). */
+function streaks(dates) {
+  const days = [...new Set(dates)].sort().map((d) => new Date(d + 'T00:00:00').getTime());
+  let longest = 0, run = 0;
+  days.forEach((t, i) => { run = i && Math.round((t - days[i - 1]) / DAYMS) === 1 ? run + 1 : 1; longest = Math.max(longest, run); });
+  const today = new Date(new Date().toLocaleDateString('en-CA') + 'T00:00:00').getTime();
+  const current = days.length && today - days[days.length - 1] <= DAYMS ? run : 0;
+  return { longest, current };
+}
+
+/** The 3-hour window with the most prompts (wrapping past midnight). */
+function peakWindow(hours) {
+  let best = 0, at = 0;
+  for (let h = 0; h < 24; h++) { const v = hours[h] + hours[(h + 1) % 24] + hours[(h + 2) % 24]; if (v > best) { best = v; at = h; } }
+  return { at, share: best / Math.max(1, hours.reduce((s, v) => s + v, 0)) };
+}
+
+/** A GitHub-style calendar: one square per day, weeks as columns, darker = more prompts. */
+function calendarChart(daily) {
+  const el = $('calendar');
+  const draw = () => {
+    if (!daily.length) { el.innerHTML = '<p class="empty">No activity in this selection.</p>'; $('calScale').innerHTML = ''; return; }
+    const by = new Map(daily.map((d) => [d.date, d.n]));
+    const first = new Date(daily[0].date + 'T00:00:00'); first.setDate(first.getDate() - first.getDay()); // back to Sunday
+    const last = new Date(daily[daily.length - 1].date + 'T00:00:00');
+    const weeks = Math.ceil((last - first) / DAYMS / 7 + 0.01);
+    const L = 30, T = 18, gap = 3;
+    const cell = Math.max(10, Math.min(28, Math.floor((Math.max(280, el.clientWidth) - L) / weeks) - gap));
+    const W = L + weeks * (cell + gap), H = T + 7 * (cell + gap);
+    // four levels by quartile of active days, like a contribution graph
+    const vals = daily.map((d) => d.n).filter(Boolean).sort((a, b) => a - b);
+    const q = [0.25, 0.5, 0.75].map((p) => vals[Math.floor(p * (vals.length - 1))]);
+    const level = (v) => (!v ? 0 : v <= q[0] ? 1 : v <= q[1] ? 2 : v <= q[2] ? 3 : 4);
+    const shade = ['var(--heat-0)', 'color-mix(in srgb, var(--signal) 30%, var(--heat-0))', 'color-mix(in srgb, var(--signal) 55%, var(--heat-0))', 'color-mix(in srgb, var(--signal) 78%, var(--heat-0))', 'var(--signal)'];
+    let out = '', lastMonth = -1;
+    for (let w = 0; w < weeks; w++) {
+      const d0 = new Date(first); d0.setDate(first.getDate() + w * 7);
+      if (d0.getMonth() !== lastMonth && (w === 0 || d0.getDate() <= 7)) { lastMonth = d0.getMonth(); out += `<text class="lab" x="${L + w * (cell + gap)}" y="11">${d0.toLocaleDateString(undefined, { month: 'short' })}</text>`; }
+      for (let d = 0; d < 7; d++) {
+        const day = new Date(d0); day.setDate(d0.getDate() + d);
+        if (day > last) continue;
+        const key = day.toLocaleDateString('en-CA'), v = by.get(key) || 0;
+        out += `<rect class="cal" x="${L + w * (cell + gap)}" y="${T + d * (cell + gap)}" width="${cell}" height="${cell}" rx="2.5" style="fill:${shade[level(v)]}" data-k="${key}" data-v="${v}"/>`;
+      }
+    }
+    ['Mon', 'Wed', 'Fri'].forEach((lab, i) => { out += `<text class="lab" x="0" y="${T + (1 + 2 * i) * (cell + gap) + cell - 2}">${lab}</text>`; });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Prompts per day, ${esc(dateStr(daily[0].date))} to ${esc(dateStr(daily[daily.length - 1].date))}">${out}</svg>`;
+    const svg = el.querySelector('svg');
+    svg.onpointermove = (e) => {
+      const c = e.target.closest('.cal'); if (!c) return hideTip();
+      const k = c.dataset.k, sess = SESSIONS.filter((s) => s.start && localKey(Date.parse(s.start)) === k).length;
+      showTip(e.clientX, e.clientY, new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), [[fmt(Number(c.dataset.v)), ' prompts'], [fmt(sess), ' sessions started']]);
+    };
+    svg.onpointerleave = hideTip;
+    $('calScale').innerHTML = 'Less' + shade.map((c) => `<i style="background:${c}"></i>`).join('') + 'More';
   };
-  $('heatmap').onpointerleave = hideTip;
-  $('hmScale').innerHTML = '0' + [0, 0.25, 0.5, 0.75, 1].map((f) => `<i style="background:${heat(f ? Math.max(1, Math.round(f * max)) : 0, max)}"></i>`).join('') + `${fmt(max)} prompts`;
+  charts.set('calendar', draw); draw();
+}
+
+/** Punch card: weekday × hour, circle area proportional to prompts; the busiest hour stands out. */
+function punchCard(hm) {
+  const el = $('punch');
+  const draw = () => {
+    const max = Math.max(1, ...hm.flat());
+    const W = Math.max(300, el.clientWidth), L = 40, T = 20, cw = (W - L) / 24, rh = Math.min(34, Math.max(24, cw * 1.1)), H = T + 7 * rh;
+    const R = Math.min(cw, rh) / 2 - 1.5;
+    let peak = [0, 0]; hm.forEach((row, d) => row.forEach((v, h) => { if (v > hm[peak[0]][peak[1]]) peak = [d, h]; }));
+    let out = '';
+    for (let h = 0; h < 24; h += 3) out += `<text class="lab" x="${L + (h + 0.5) * cw}" y="11" text-anchor="middle">${h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : h - 12 + 'p'}</text>`;
+    for (let d = 0; d < 7; d++) {
+      const cy = T + (d + 0.5) * rh;
+      out += `<text class="lab" x="0" y="${cy + 4}">${DOW[d]}</text><line class="rowline" x1="${L}" x2="${W}" y1="${cy}" y2="${cy}"/>`;
+      for (let h = 0; h < 24; h++) {
+        const v = hm[d][h]; if (!v) continue;
+        const r = Math.max(2, R * Math.sqrt(v / max));
+        out += `<circle class="pc${d === peak[0] && h === peak[1] ? ' peak' : ''}" cx="${L + (h + 0.5) * cw}" cy="${cy}" r="${r.toFixed(1)}" data-d="${d}" data-h="${h}"/>`;
+      }
+    }
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Prompts by weekday and hour">${out}</svg>`;
+    const svg = el.querySelector('svg');
+    svg.onpointermove = (e) => {
+      const c = e.target.closest('.pc'); if (!c) return hideTip();
+      const d = Number(c.dataset.d), h = Number(c.dataset.h);
+      showTip(e.clientX, e.clientY, `${DOW[d]} ${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`, [[fmt(hm[d][h]), ' prompts']]);
+    };
+    svg.onpointerleave = hideTip;
+  };
+  charts.set('punch', draw); draw();
+}
+
+function renderRhythm(a) {
+  const hm = a.cadence.heatmap;
+  const daily = a.cadence.daily || [];
+  const st = streaks(daily.map((d) => d.date));
+  const pw = peakWindow(a.cadence.hour);
+  const dow = Object.entries(a.cadence.dow).sort((x, y) => y[1] - x[1])[0];
+  const span = daily.length ? Math.round((new Date(daily[daily.length - 1].date) - new Date(daily[0].date)) / DAYMS) + 1 : 0;
+  const weekend = (a.cadence.dow.Sat + a.cadence.dow.Sun) / Math.max(1, Object.values(a.cadence.dow).reduce((s, v) => s + v, 0));
+  const hh = (h) => `${String(h % 24).padStart(2, '0')}:00`;
+  kpis('rhythmKpis', [
+    ['active days', `${daily.length} of ${span}`, `${rate(daily.length / Math.max(1, span))} of the days in view`],
+    ['longest streak', `${st.longest} day${st.longest === 1 ? '' : 's'}`, st.current ? `current streak ${st.current}` : 'no current streak'],
+    ['peak hours', `${hh(pw.at)}–${hh(pw.at + 3)}`, `${rate(pw.share)} of prompts`],
+    ['busiest weekday', dow ? dow[0] : '—', `${rate(weekend)} on weekends`],
+  ]);
+  calendarChart(daily);
+  punchCard(hm);
+  $('rhythmHint').textContent = `Bigger circles mean more prompts; the orange one is your busiest hour. You do ${rate(pw.share)} of your prompting between ${hh(pw.at)} and ${hh(pw.at + 3)}.`;
   $('hmTable').innerHTML = '<tr><th>Day</th>' + Array.from({ length: 24 }, (_, h) => `<th>${String(h).padStart(2, '0')}</th>`).join('') + '</tr>' +
     hm.map((row, d) => `<tr><td>${DOW[d]}</td>${row.map((v) => `<td>${v || ''}</td>`).join('')}</tr>`).join('');
-  const peak = a.cadence.hour.indexOf(Math.max(...a.cadence.hour));
-  const dow = Object.entries(a.cadence.dow).sort((x, y) => y[1] - x[1])[0];
-  $('rhythmHint').textContent = `Hover a cell for its count. Busiest hour: ${String(peak).padStart(2, '0')}:00. Busiest weekday: ${dow ? dow[0] : '—'}.`;
-  lineChart('trend', a.cadence.daily || [], (d) => d.n, fmt, 'Prompts');
   dailyTable('trendTbl', a.cadence.daily, (d) => d.n, fmt);
 }
 

@@ -294,7 +294,8 @@ only, and follows your system's light or dark setting. It reads top to bottom as
 8. **Extensions.** Plugins, skills, MCP servers, hooks, subagents and slash commands, as sortable
    tables with verdicts.
 9. **Risk.** Secret and key access, destructive commands, error bursts.
-10. **When you work.** Activity by weekday and hour, and a daily trend.
+10. **When you work.** Active days, streaks and peak hours; an activity calendar with one square
+    per day; and a weekday × hour punch card.
 11. **How you prompt.** Your style, prompt-engineering practices in your opening prompts compared
     with how those sessions went, zero-, one- and few-shot shares, techniques, openings that could
     say more, prompt length, and prompts you repeat.
