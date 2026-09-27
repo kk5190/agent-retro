@@ -1,0 +1,32 @@
+LICENSE
+  s_135e7898200b4f::t_953e76d7432091 3
+  s_135e7898200b4f::t_83a689b9db5d14 1-2,4-21
+.github/workflows/test.yml
+  s_135e7898200b4f::t_16226d25e79463 1-18,20
+  s_135e7898200b4f::t_953e76d7432091 19
+.gitignore
+  s_135e7898200b4f::t_83a689b9db5d14 1-4
+  s_135e7898200b4f::t_cdfeaac7fb0ff3 5
+package.json
+  s_135e7898200b4f::t_be593e10748381 14-15,23
+  s_135e7898200b4f::t_83a689b9db5d14 1,5-6,8-9,11-13,16-17,19-21,25-31,34-49
+  s_135e7898200b4f::t_8a7201fe362c8b 22
+  s_135e7898200b4f::t_953e76d7432091 2-4,7,10,18,32-33
+  s_135e7898200b4f::t_3957781afcb6b4 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "df9a48a4cc3cdd8a2eaf7a086ae751cff3030373",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
