@@ -1232,7 +1232,8 @@
         "used",
         "rarely used",
         "unused",
-        "no activity"
+        "no activity",
+        "disabled"
       ]
     }
   }

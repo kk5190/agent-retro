@@ -59,8 +59,8 @@ function unusedPlugins({ analysis, config }) {
   const idle = E.plugins.filter(idleNow).sort((a, b) => b.listingTokens - a.listingTokens);
   if (!idle.length) return null;
   const tokens = sum(idle, (p) => p.listingTokens);
-  const known = idle.map((p) => p.enabledKey || Object.keys(config.enabledPlugins).find((key) => key.split('@')[0] === p.name)).filter(Boolean);
-  const elsewhere = idle.filter((p) => !(p.enabledKey || Object.keys(config.enabledPlugins).some((key) => key.split('@')[0] === p.name))).map((p) => p.name);
+  const known = idle.map((p) => p.enabledKey).filter(Boolean);
+  const elsewhere = idle.filter((p) => !p.enabledKey).map((p) => p.name);
   return {
     id: 'unused-plugins', level: tokens >= 1500 ? 'high' : 'medium',
     title: `Disable ${plural(idle.length, 'plugin')} you never use`,
@@ -240,7 +240,7 @@ function workflowCommand({ analysis }) {
   if (!w) return null;
   const slug = w.steps.slice(0, 3).join('-').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
   return {
-    id: 'workflow-command', level: 'low',
+    id: 'workflow-command', level: 'low', personal: true,
     title: 'Turn a sequence you repeat into one command',
     evidence: `${w.steps.join(' → ')} ran in ${w.sessions} sessions (${w.runs} times). Each time, the agent works out the same steps again.`,
     action: 'Save the sequence as a slash command so it runs the same way every time. Fill in the exact flags you use.',
@@ -357,7 +357,7 @@ function promptPractices({ analysis }) {
   };
 }
 
-const READ_ONLY = /^(git (status|diff|log|show|branch)|ls|cat|grep|rg|find|head|tail|wc|tree|pwd|which)$/;
+const READ_ONLY = /^(git (status|diff|log|show)|ls|cat|grep|rg|head|tail|wc|tree|pwd|which)$/;
 function allowlist({ sessions, config }) {
   const mode = config.permissions.defaultMode;
   if (mode === 'bypassPermissions' || mode === 'dontAsk') return null;

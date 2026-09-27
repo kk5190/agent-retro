@@ -66,7 +66,7 @@ import { loadEvents, eventsToData } from './agents.mjs';
 import { recommend, readClaudeConfig, REC_METRIC } from './recommend.mjs';
 import { summarizePrompts } from './prompts.mjs';
 import { buildRetro, retroSnapshot } from './retro.mjs';
-import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, sprintWindows, defaultSprint, localDay, TASK_IDS, toolBucket } from './sessions.mjs';
+import { buildSessions, summarizeTasks, summarizeSessions, summarizeInventory, summarizeExtensions, comparePeriods, sprintWindows, defaultSprint, localDay, localDate, TASK_IDS, toolBucket } from './sessions.mjs';
 
 const home = () => process.env.AGENT_RETRO_HOME || os.homedir();
 
@@ -219,7 +219,7 @@ export async function loadTelemetry(o) {
   const windows = sprintWindows(sessions, calendar);
   const pick = o.sprintPick ? localDay(o.sprintPick) : null;
   const selected = (pick != null && windows.find((w) => pick >= w.from && pick < w.to)) || defaultSprint(windows);
-  const isoDay = (t) => new Date(t).toLocaleDateString('en-CA');
+  const isoDay = localDate;
   analysis.sprint = { calendar, windows: windows.map((w) => ({ from: isoDay(w.from), to: isoDay(w.to - 1), current: w.current, sessions: w.sessions })), selected: selected ? isoDay(selected.from) : null };
   analysis.trend = comparePeriods(sessions, o.split ? { split: Date.parse(o.split) } : { window: selected });
   const config = readClaudeConfig();
@@ -852,6 +852,13 @@ async function main() {
     const n = writeDemo(dir);
     console.error(`[agent-retro] demo mode: ${n} synthetic sessions in ${dir} (your own logs are not read)`);
   }
+  if (o.sprintStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.sprintStart) || Number.isNaN(Date.parse(o.sprintStart)))) { console.error('--sprint-start needs a date like 2026-09-16'); process.exit(2); }
+  if (o.sprintPick && Number.isNaN(Date.parse(o.sprintPick))) { console.error('--sprint needs a date like 2026-09-20'); process.exit(2); }
+  if (o.saveSprint) {
+    if (!o.sprintStart) { console.error('--save-sprint needs --sprint-start <date> (and optionally --sprint-days <n>)'); process.exit(2); }
+    try { writeSprintConfig({ start: o.sprintStart, days: o.sprintDays || 14 }); } catch (err) { console.error(err.message); process.exit(2); }
+    console.error(`[agent-retro] sprint calendar saved: ${o.sprintDays || 14}-day sprints starting ${o.sprintStart}.`);
+  }
   if (o.ui) { const { startUi } = await import('./ui.mjs'); await startUi(o); return; }
   if (o.listAgents) { const { PARSABLE } = await import('./agents.mjs'); console.log(PARSABLE.join('\n')); return; }
   if (o.doctor) {
@@ -873,15 +880,6 @@ async function main() {
     return;
   }
 
-  if (o.sprintStart && (!/^\d{4}-\d{2}-\d{2}$/.test(o.sprintStart) || Number.isNaN(Date.parse(o.sprintStart)))) { console.error('--sprint-start needs a date like 2026-09-16'); process.exit(2); }
-  if (o.sprintPick && Number.isNaN(Date.parse(o.sprintPick))) { console.error('--sprint needs a date like 2026-09-20'); process.exit(2); }
-  if (o.saveSprint) {
-    {
-      if (!o.sprintStart) { console.error('--save-sprint needs --sprint-start <date> (and optionally --sprint-days <n>)'); process.exit(2); }
-      try { writeSprintConfig({ start: o.sprintStart, days: o.sprintDays || 14 }); } catch (err) { console.error(err.message); process.exit(2); }
-      console.error(`[agent-retro] sprint calendar saved: ${o.sprintDays || 14}-day sprints starting ${o.sprintStart}.`);
-    }
-  }
   if (o.split && Number.isNaN(Date.parse(o.split))) { console.error('--split needs a date, e.g. 2026-09-01'); process.exit(2); }
   if (o.label) {
     const i = o.label.indexOf('=');

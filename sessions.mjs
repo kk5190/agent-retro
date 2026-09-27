@@ -536,6 +536,8 @@ export function compareMetric(key, before, after) {
 // Sprints — the calendar the retro and its trend follow
 // ---------------------------------------------------------------------------
 const DAY = 864e5;
+/** ms → "2026-09-16" in local time. (toLocaleDateString('en-CA') is not reliable: some Node builds print 9/16/2026.) */
+export const localDate = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 /** "2026-09-16" → local midnight of that day, in ms. */
 export const localDay = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
 
@@ -553,16 +555,18 @@ export function sprintWindows(sessions, calendar, { now = Date.now(), days = 14,
     const to = Math.max(...starts) + 1;
     return [{ from: to - days * DAY, to, current: false, rolling: true, sessions: countIn(to - days * DAY, to) }];
   }
-  const len = calendar.days * DAY;
-  const origin = localDay(calendar.start);
-  const k = Math.floor((now - origin) / len);
+  // Step in calendar days (new Date(y, m, d + n)) so boundaries stay at local midnight across DST changes.
+  const [y, m, d] = String(calendar.start).split('-').map(Number);
+  const dayStart = (offset) => new Date(y, m - 1, d + offset).getTime();
+  const today = new Date(now); const todayIdx = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(y, m - 1, d)) / DAY);
+  const k = Math.floor(todayIdx / calendar.days);
   // reach back to the earliest session (at least `count` sprints, at most two years)
-  const back = starts.length ? Math.ceil((now - Math.min(...starts)) / len) + 1 : count;
-  const n = Math.min(Math.max(count, back), Math.ceil(730 * DAY / len));
+  const back = starts.length ? Math.ceil((now - Math.min(...starts)) / (calendar.days * DAY)) + 1 : count;
+  const n = Math.min(Math.max(count, back), Math.ceil(730 / calendar.days));
   const out = [];
   for (let i = 0; i < n; i++) {
-    const from = origin + (k - i) * len;
-    out.push({ from, to: from + len, current: i === 0, rolling: false, sessions: countIn(from, from + len) });
+    const from = dayStart((k - i) * calendar.days), to = dayStart((k - i + 1) * calendar.days);
+    out.push({ from, to, current: i === 0, rolling: false, sessions: countIn(from, to) });
   }
   return out;
 }
@@ -653,12 +657,13 @@ export function summarizeExtensions(sessions, inventory, config = {}) {
 
   // Plugins: grouped from their skills, MCP servers and commands; enabled state from settings
   const plugins = {};
-  const plugin = (name) => (plugins[name] = plugins[name] || { name, enabledKey: null, skillsListed: 0, skillsUsed: 0, uses: 0, mcpServers: [], commandsUsed: 0, listingTokens: 0, sessionsLoaded: 0, current: false, lastUsed: null });
+  const plugin = (name) => (plugins[name] = plugins[name] || { name, enabledKey: null, disabled: false, skillsListed: 0, skillsUsed: 0, uses: 0, mcpServers: [], commandsUsed: 0, listingTokens: 0, sessionsLoaded: 0, current: false, lastUsed: null });
   for (const k of skillList) if (k.plugin) {
     const p = plugin(k.plugin); p.skillsListed += k.sessionsLoaded ? 1 : 0; p.skillsUsed += k.uses ? 1 : 0; p.uses += k.uses; p.listingTokens += k.listingTokens;
     p.sessionsLoaded = Math.max(p.sessionsLoaded, k.sessionsLoaded); p.current = p.current || k.current; if (k.lastUsed && (!p.lastUsed || k.lastUsed > p.lastUsed)) p.lastUsed = k.lastUsed;
   }
-  for (const key of Object.keys(config.enabledPlugins || {})) plugin(key.split('@')[0]).enabledKey = key;
+  // enabledPlugins maps "name@marketplace" to true/false: only true is enabled
+  for (const [key, on] of Object.entries(config.enabledPlugins || {})) { const p = plugin(key.split('@')[0]); if (on === false) p.disabled = true; else p.enabledKey = key; }
   for (const m of mcpList) {
     const p = Object.values(plugins).find((x) => m.key.startsWith(`plugin_${mcpKey(x.name)}_`));
     if (p) { p.mcpServers.push(m.name); p.uses += m.calls; p.sessionsLoaded = Math.max(p.sessionsLoaded, m.sessionsLoaded); p.current = p.current || m.current; }
@@ -669,7 +674,7 @@ export function summarizeExtensions(sessions, inventory, config = {}) {
     if (s.start && (!x.lastUsed || s.start > Date.parse(x.lastUsed))) x.lastUsed = iso(s.start);
     const p = /^\/?([^:\s]+):/.exec(c); if (p && plugins[p[1]]) { plugins[p[1]].commandsUsed += n; plugins[p[1]].uses += n; }
   }
-  const pluginList = Object.values(plugins).map((p) => ({ ...p, verdict: p.uses ? (p.skillsListed && p.skillsUsed / p.skillsListed < 0.1 ? 'rarely used' : 'used') : p.sessionsLoaded ? 'unused' : 'no activity' }))
+  const pluginList = Object.values(plugins).map((p) => ({ ...p, verdict: p.disabled ? 'disabled' : p.uses ? (p.skillsListed && p.skillsUsed / p.skillsListed < 0.1 ? 'rarely used' : 'used') : p.sessionsLoaded ? 'unused' : 'no activity' }))
     .sort((a, b) => b.uses - a.uses || b.listingTokens - a.listingTokens);
 
   // Hooks

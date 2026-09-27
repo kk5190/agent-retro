@@ -119,6 +119,13 @@ function sqlite(db, sql) {
   catch { return ''; }
 }
 
+/** Rows as objects via `sqlite3 -json`, so free-text columns containing "|" or newlines stay intact. */
+function sqliteRows(db, sql) {
+  const out = (() => { try { return execFileSync('sqlite3', ['-json', db, sql], { encoding: 'utf8', maxBuffer: 1 << 28 }).trim(); } catch { return ''; } })();
+  if (!out) return [];
+  try { return JSON.parse(out); } catch { return []; }
+}
+
 // ---------------------------------------------------------------------------
 // Anti-rot layer 1: shape-based parsing for when exact field names change
 // ---------------------------------------------------------------------------
@@ -364,15 +371,14 @@ function collectZed(o) {
   const dbs = fs.readdirSync(root).filter((n) => n.endsWith('.db'));
   for (const name of dbs) {
     const db = path.join(root, name);
-    const rows = sqlite(db, "SELECT id, summary, created_at, data_type, hex(data) FROM threads;");
-    if (!rows) continue;
-    for (const line of rows.split('\n')) {
-      const [id, summary, created, dtype, hex] = line.split('|');
+    for (const row of sqliteRows(db, 'SELECT id, summary, created_at AS created, data_type AS dtype, hex(data) AS hex FROM threads;')) {
+      const { id, summary, created, dtype, hex } = row;
       if (!hex) continue;
       let raw = Buffer.from(hex, 'hex');
       try { if (dtype === 'zstd') raw = zlib.zstdDecompressSync(raw); } catch { continue; }
       let thread; try { thread = JSON.parse(raw.toString('utf8')); } catch { continue; }
-      const ts = thread.updated_at || (created ? Number(created) : null);
+      // updated_at and created_at are datetime text (or epoch digits): normalise to epoch ms like every other adapter
+      const ts = asTime(thread.updated_at) ?? asTime(/^\d+$/.test(String(created)) ? Number(created) : created);
       const proj = basenameOf((thread.folder_paths && thread.folder_paths[0])) || 'zed';
       const msgs = extractMessages(thread);
       for (const m of msgs) {

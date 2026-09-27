@@ -14,6 +14,7 @@ import { sessionView, rollupView, generator, SCHEMA_VERSION } from './telemetry.
 import { TASK_IDS } from './sessions.mjs';
 
 const PROTOCOL = '2025-06-18';
+const CACHE_MS = 60000;
 
 const FILTERS = {
   days: { type: 'number', description: 'Only include activity from the last N days' },
@@ -80,15 +81,17 @@ export function createServer(o = {}) {
   async function telemetry(args = {}) {
     const f = { days: args.days || null, project: args.project || null, sprintPick: args.sprint || null };
     const key = JSON.stringify(f);
-    if (!cache.has(key)) {
-      cache.set(key, (async () => {
+    const hit = cache.get(key);
+    // The server lives as long as the Claude Code session: re-read the logs once the snapshot is a minute old.
+    if (!hit || Date.now() - hit.at > CACHE_MS) {
+      cache.set(key, { at: Date.now(), value: (async () => {
         const opts = { ...o, dirs: o.dirs || [], ...f, top: 15, history: true };
         const t = await loadTelemetry(opts);
         t.analysis.cliHistory = loadHistory(opts);
         return t;
-      })());
+      })() });
     }
-    try { return await cache.get(key); } catch (err) { cache.delete(key); throw err; }
+    try { return await cache.get(key).value; } catch (err) { cache.delete(key); throw err; }
   }
 
   const handlers = {

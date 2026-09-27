@@ -25,15 +25,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = path.join(__dirname, 'ui', 'index.html');
 const cache = new Map();
 
+/** Options the dashboard was started with (--dir, --tz, --sprint-start, …): the base every query starts from. */
+let launch = {};
+
+/** A page query on top of the launch options: the page's filters win where it sets them. */
 function queryOpts(q) {
+  const has = (k) => q[k] != null && q[k] !== '';
   return {
-    dirs: [], project: q.project || null, days: q.days ? Number(q.days) : null,
-    top: q.top ? Number(q.top) : 15, tz: q.tz != null && q.tz !== '' ? Number(q.tz) : null,
-    includeTranscripts: q.transcripts === '1', history: q.history !== '0',
-    allSources: q.all === '1', errors: false, format: 'json',
-    allAgents: q.agents === '1', agent: q.agent || null, sprintPick: q.sprint || null,
+    dirs: launch.dirs || [], project: q.project || null, days: has('days') ? Number(q.days) : launch.days || null,
+    top: q.top ? Number(q.top) : 15, tz: has('tz') ? Number(q.tz) : launch.tz ?? null,
+    includeTranscripts: q.transcripts === '1' || (!has('transcripts') && !!launch.includeTranscripts), history: q.history !== '0' && launch.history !== false,
+    allSources: q.all === '1' || (!has('all') && !!launch.allSources), errors: false, format: 'json',
+    allAgents: q.agents === '1', agent: q.agent || null,
+    sprintPick: q.sprint || null, sprintStart: launch.sprintStart || null, sprintDays: launch.sprintDays || null,
   };
 }
+
+/** The page shows command counts only; the typed lines themselves never leave the process. */
+const historySummary = (h) => ({ commands: h.commands, typed: h.typed });
 
 /** Rollup + sessions for one filter combination, parsed once and cached. */
 async function build(q) {
@@ -42,7 +51,7 @@ async function build(q) {
   if (cache.has(key)) return cache.get(key);
   const o = queryOpts(filters);
   const { analysis, sessions } = await loadTelemetry(o);
-  const result = { analysis: { ...analysis, cliHistory: o.history ? loadHistory(o) : null }, sessions };
+  const result = { analysis: { ...analysis, cliHistory: o.history ? historySummary(loadHistory(o)) : null }, sessions };
   if (cache.size > 32) cache.clear();
   cache.set(key, result);
   return result;
@@ -54,6 +63,7 @@ async function meta() {
     projects: Object.keys(analysis.projects).sort(),
     agents: ['claude', ...PARSABLE],
     contextLabels: CONTEXT_LABELS,
+    defaults: { agents: launch.agent ? launch.agent : launch.allAgents ? 'all' : '', days: launch.days ? String(launch.days) : '', transcripts: !!launch.includeTranscripts, all: !!launch.allSources },
     tasks: [...TASKS.map((t) => ({ id: t.id, label: t.label })), { id: 'other', label: 'Other' }],
     files: analysis.scope.files,
     first: analysis.scope.first,
@@ -61,6 +71,8 @@ async function meta() {
     transcripts: fs.existsSync(path.join(process.env.AGENT_RETRO_HOME || process.env.HOME || '', '.claude', 'transcripts')),
   };
 }
+
+const ALLOWED_HOSTS = (port) => new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 
 /** Writes only from the dashboard itself: same origin, JSON body (so other sites cannot post here). */
 function sameOrigin(req, host, port) {
@@ -83,12 +95,15 @@ function sendJson(res, code, obj) {
 }
 
 export function startUi(o = {}) {
+  launch = o;
   const port = o.port || 4173;
   const host = '127.0.0.1';
 
   return new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url, `http://${host}:${port}`);
+      // DNS rebinding: a hostile site can resolve its own name to 127.0.0.1, so only answer requests addressed to us
+      if (!ALLOWED_HOSTS(port).has(String(req.headers.host || '').toLowerCase())) return sendJson(res, 421, { error: 'unexpected Host header' });
       try {
         if (url.pathname === '/' || url.pathname === '/index.html') {
           const html = fs.readFileSync(HTML_PATH);
@@ -109,6 +124,7 @@ export function startUi(o = {}) {
         if (url.pathname === '/api/config/sprint' && req.method === 'POST') {
           const { sprint } = await readBody(req);
           try { writeSprintConfig(sprint || null); } catch (err) { return sendJson(res, 400, { error: err.message }); }
+          launch = { ...launch, sprintStart: null, sprintDays: null }; // the saved calendar now wins over launch flags
           cache.clear();
           return sendJson(res, 200, { ok: true });
         }

@@ -576,7 +576,7 @@ test('sprints: a Wednesday calendar gives aligned windows; the retro reviews the
   add('2026-08-25', 3); add('2026-09-08', 4); add('2026-09-20', 2);
   const sessions = buildSessions(ev);
   const w = sprintWindows(sessions, cal, { now, count: 3 });
-  const day = (t) => new Date(t).toLocaleDateString('en-CA');
+  const { localDate: day } = await import('./sessions.mjs');
   assert.deepEqual(w.slice(0, 3).map((x) => [day(x.from), day(x.to - 1), x.current, x.sessions]), [
     ['2026-09-16', '2026-09-29', true, 2], ['2026-09-02', '2026-09-15', false, 4], ['2026-08-19', '2026-09-01', false, 3]]);
   assert.equal(new Date(w[1].from).getDay(), 3, 'sprints start on Wednesday');
@@ -599,4 +599,82 @@ test('cli: --sprint-start/--save-sprint set the calendar; --sprint picks a windo
   const picked = run('--retro', '--sprint', '2026-03-01');
   assert.equal(picked.status, 0, picked.stderr);
   assert.match(picked.stdout, /RETRO · sprint 2026-02-25 → 2026-03-10/);
+});
+
+// --- regressions from the code review ------------------------------------------
+test('review: redaction covers JSON and quoted keys', async () => {
+  const { redact } = await import('./telemetry.mjs');
+  const r = redact('{"password": "hunter2", "api_key": "abc123", \'token\': \'t0k\'} db_pwd=x9');
+  assert.ok(!/hunter2|abc123|t0k|x9/.test(r), r);
+});
+
+test('review: the allowlist never pre-approves commands that can delete', async () => {
+  const { recommend } = await import('./recommend.mjs');
+  const { buildSessions } = await import('./sessions.mjs');
+  const ev = [{ agent: 'x', sessionId: 'a', ts: 1, role: 'user', text: 'look around the repo please' }];
+  for (const c of ['git branch -a', 'find . -name x', 'grep -r foo', 'cat a.txt', 'git status']) for (let i = 0; i < 25; i++) ev.push({ agent: 'x', sessionId: 'a', ts: 2, role: 'tool', toolName: 'Bash', detail: c });
+  const cfg = { enabledPlugins: {}, permissions: {}, userMcp: {}, projectMcp: {}, userSkills: new Set() };
+  const r = recommend({ context: {}, contextBreakdown: {}, risk: {} }, buildSessions(ev), cfg).find((x) => x.id === 'allowlist');
+  assert.ok(r);
+  assert.ok(!/git branch|find/.test(r.fix.content), r.fix.content);
+});
+
+test('review: repeated-sequence advice quotes command names, so it is personal', async () => {
+  const { recommend } = await import('./recommend.mjs');
+  const cfg = { enabledPlugins: {}, permissions: {}, userMcp: {}, projectMcp: {}, userSkills: new Set() };
+  const r = recommend({ workflows: [{ steps: ['acme-deploy', 'npm test', 'git push'], sessions: 3, runs: 3 }], context: {}, contextBreakdown: {}, risk: {} }, [], cfg).find((x) => x.id === 'workflow-command');
+  assert.equal(r.personal, true);
+  const { rollupView } = await import('./telemetry.mjs');
+  const view = rollupView({ repeated: [], insights: [], tasks: {}, projects: {}, sessions: { longest: [] }, recommendations: [r] }, 'none');
+  assert.ok(!JSON.stringify(view.recommendations).includes('acme-deploy'));
+});
+
+test('review: a plugin disabled in settings is never recommended for disabling again', async () => {
+  const { summarizeExtensions } = await import('./sessions.mjs');
+  const inv = { sessionsMeasured: 5, latestSession: new Date().toISOString(), skills: { 'off:a': { plugin: 'off', loadedSessions: 5, usedSessions: 0, tokens: 40, lastSeen: new Date().toISOString() } }, mcpServers: {} };
+  const E = summarizeExtensions([], inv, { enabledPlugins: { 'off@m': false } });
+  const p = E.plugins.find((x) => x.name === 'off');
+  assert.deepEqual([p.verdict, p.enabledKey], ['disabled', null]);
+});
+
+test('review: sprint windows stay on local midnight across daylight saving', () => {
+  const code = "import('./sessions.mjs').then((m) => { const w = m.sprintWindows([], { start: '2026-01-07', days: 14 }, { now: Date.parse('2026-11-20T12:00:00Z'), count: 24 }); console.log(w.filter((x) => new Date(x.from).getHours() || new Date(x.from).getDay() !== 3).length); })";
+  for (const TZ of ['America/New_York', 'Europe/Berlin']) {
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, TZ }, encoding: 'utf8', cwd: path.dirname(CLI) });
+    assert.equal(r.stdout.trim(), '0', `${TZ}: ${r.stderr}`);
+  }
+});
+
+test('review: Zed rows survive "|" and newlines in summaries, with epoch timestamps', { skip: spawnSync('sqlite3', ['-version']).status !== 0 && 'sqlite3 CLI not installed' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-zed-'));
+  const dir = path.join(home, 'Library/Application Support/Zed/threads');
+  fs.mkdirSync(dir, { recursive: true });
+  const thread = JSON.stringify({ updated_at: '2026-03-02T10:00:00Z', folder_paths: ['/w/zedproj'], messages: [{ role: 'user', content: 'fix the a | b parser please' }] });
+  const hex = Buffer.from(thread).toString('hex');
+  const sql = `CREATE TABLE threads (id TEXT, summary TEXT, created_at TEXT, data_type TEXT, data BLOB); INSERT INTO threads VALUES ('z1', 'Fix a | b parser' || char(10) || 'second line', '2026-03-02 10:00:00', 'json', x'${hex}');`;
+  assert.equal(spawnSync('sqlite3', [path.join(dir, 'threads.db'), sql]).status, 0);
+  const code = "import('./agents.mjs').then((m) => console.log(JSON.stringify(m.collectFor('zed', {}))))";
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, AGENT_RETRO_HOME: home }, encoding: 'utf8', cwd: path.dirname(CLI) });
+  const ev = JSON.parse(r.stdout || '[]');
+  assert.ok(ev.some((e) => e.role === 'user' && e.text === 'fix the a | b parser please'), r.stderr);
+  assert.ok(ev.every((e) => typeof e.ts === 'number' && e.ts === Date.parse('2026-03-02T10:00:00Z')));
+  assert.ok(ev.some((e) => e.role === 'title' && e.text.includes('\n')));
+});
+
+test('review: the dashboard refuses foreign Host headers and never serves raw history lines', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-retro-ui-'));
+  writeFixtures(home);
+  fs.writeFileSync(path.join(home, '.claude/history.jsonl'), JSON.stringify({ display: 'my secret typed line', timestamp: Date.now() }) + '\n');
+  const port = 4300 + Math.floor(Math.random() * 500);
+  const child = spawn(process.execPath, [CLI, '--ui', '--port', String(port), '--dir', path.join(home, '.claude/projects')], { env: { ...process.env, AGENT_RETRO_HOME: home }, stdio: ['ignore', 'pipe', 'inherit'] });
+  try {
+    await new Promise((res) => child.stdout.on('data', (d) => { if (/agent-retro UI/.test(d)) res(); }));
+    const http = await import('node:http');
+    const get = (pathname, host) => new Promise((res, rej) => http.get({ host: '127.0.0.1', port, path: pathname, headers: { Host: host } }, (r) => { let b = ''; r.on('data', (c) => { b += c; }); r.on('end', () => res([r.statusCode, b])); }).on('error', rej));
+    assert.equal((await get('/api/data', `evil.example:${port}`))[0], 421);
+    const [code, body] = await get('/api/data', `127.0.0.1:${port}`);
+    assert.equal(code, 200);
+    assert.ok(!body.includes('my secret typed line'));
+    assert.equal(JSON.parse(body).sessions.count, 3, '--dir from the command line is honoured');
+  } finally { child.kill(); }
 });

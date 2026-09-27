@@ -7,7 +7,7 @@
  * action items (baseline → now). No new analysis happens here; every item points at the section
  * holding its numbers.
  */
-import { TREND_METRICS, compareMetric } from './sessions.mjs';
+import { TREND_METRICS, compareMetric, localDate } from './sessions.mjs';
 import { REC_METRIC, PLAYBOOKS } from './recommend.mjs';
 
 export const SPRINT_DAYS = 14;
@@ -38,7 +38,7 @@ function sprintSessions(sessions, window) {
 export function buildRetro(analysis, sessions, previous = null, window = null, calendar = null) {
   const a = analysis;
   const { list, from, to } = sprintSessions(sessions, window);
-  const iso = (t) => (t ? new Date(t).toLocaleDateString('en-CA') : null); // local calendar day, like the sprint calendar
+  const iso = (t) => (t ? localDate(t) : null); // local calendar day, like the sprint calendar
   const recs = a.recommendations || [];
 
   // Sprint card
