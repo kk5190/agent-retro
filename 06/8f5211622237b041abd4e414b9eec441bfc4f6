@@ -1,0 +1,22 @@
+ui/index.html
+  s_135e7898200b4f::t_0508ee5149a91c 144-146,672,1065
+  s_135e7898200b4f::t_8df05be6c35f4b 147-152,159,453-454,525,527-533,536-539,681-698,700,702-703,707-709,713,716-717,719,727-728,730-731,733,735-736,1035-1064,1066-1092,1094-1145
+README.md
+  s_135e7898200b4f::t_2a07ef073ac58c 297-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "068f5211622237b041abd4e414b9eec441bfc4f6",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "unknown"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
