@@ -1,0 +1,20 @@
+ui/index.html
+  s_135e7898200b4f::t_29e3a5a2b28508 357-365,368-381,715,1548-1556,1558-1563
+  s_135e7898200b4f::t_700a5bc1934c2c 366-367,1557
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb256886efd8cfa4f56b7ab277ac7bca548809f9",
+  "prompts": {},
+  "sessions": {
+    "s_135e7898200b4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85e90e82-576b-4cad-b0d9-4ef174118196",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "kk5190 <kk5190krrish@gmail.com>"
+    }
+  }
+}
